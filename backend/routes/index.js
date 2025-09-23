@@ -1,10 +1,14 @@
 // backend/routes/index.js
+// backend/routes/index.js
 const express = require('express');
 const router = express.Router();
-
+const auth = require('../middleware/auth');
 // Импортируем контроллеры
 const { register, login, getProfile } = require('../controllers/authController');
-const auth = require('../middleware/auth');
+console.log('Register:', register);
+console.log('Login:', login); 
+console.log('GetProfile:', getProfile);
+
 
 // Публичные маршруты аутентификации
 router.post('/auth/register', register);
