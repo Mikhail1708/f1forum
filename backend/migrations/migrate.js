@@ -61,6 +61,25 @@ const runMigrations = async () => {
             FOREIGN KEY (topic_id) REFERENCES topics (id) ON DELETE CASCADE,
             FOREIGN KEY (parent_id) REFERENCES comments (id) ON DELETE CASCADE
         );
+          -- Таблица Гран-при
+         CREATE TABLE IF NOT EXISTS grand_prix (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        country TEXT NOT NULL,
+        track TEXT NOT NULL,
+        event_date DATETIME NOT NULL,
+        description TEXT,
+        is_next BOOLEAN DEFAULT FALSE,
+        is_completed BOOLEAN DEFAULT FALSE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );  
+          -- Добавляем тестовые данные Гран-при
+         INSERT OR IGNORE INTO grand_prix (title, country, track, event_date, description) VALUES
+        ('Гран-при Бахрейна', 'Бахрейн', 'Международный автодром Бахрейна', '2024-03-02 15:00:00', 'Первый этап сезона 2024'),
+        ('Гран-при Саудовской Аравии', 'Саудовская Аравия', 'Джидда', '2024-03-09 18:00:00', 'Ночная гонка в Джидде'),
+        ('Гран-при Австралии', 'Австралия', 'Альберт-Парк', '2024-03-24 07:00:00', 'Гонка в Мельбурне');
+        
+    
 
         -- Таблица лайков
         CREATE TABLE IF NOT EXISTS likes (
@@ -74,6 +93,7 @@ const runMigrations = async () => {
             FOREIGN KEY (topic_id) REFERENCES topics (id) ON DELETE CASCADE,
             FOREIGN KEY (comment_id) REFERENCES comments (id) ON DELETE CASCADE
         );
+        
 
         -- Вставляем основные категории
         INSERT OR IGNORE INTO categories (name, description, slug) VALUES
@@ -84,6 +104,7 @@ const runMigrations = async () => {
         ('История F1', 'Исторические моменты', 'history'),
         ('Для новичков', 'Вопросы и ответы для новичков', 'beginners');
     `, '001_initial_schema');
+    
 
     console.log('✅ Миграции успешно применены!');
 };
