@@ -50,25 +50,25 @@
 
     <!-- Быстрая статистика -->
     <div class="stats-grid">
-      <div class="stat-card">
+      <div class="stat-card" @click="goToDrivers">
         <h3>👥 Пилоты</h3>
         <div class="stat-number">{{ driversCount }}</div>
         <p>в базе данных</p>
       </div>
       
-      <div class="stat-card">
+      <div class="stat-card" @click="goToConstructors">
         <h3>🏁 Команды</h3>
         <div class="stat-number">{{ constructorsCount }}</div>
         <p>в сезоне {{ currentSeason }}</p>
       </div>
       
-      <div class="stat-card">
+      <div class="stat-card" @click="goToCircuits">
         <h3>📍 Трассы</h3>
         <div class="stat-number">{{ circuitsCount }}</div>
         <p>в календаре</p>
       </div>
       
-      <div class="stat-card">
+      <div class="stat-card" @click="goToRaces">
         <h3>📊 Гонки</h3>
         <div class="stat-number">{{ racesCount }}</div>
         <p>в сезоне {{ currentSeason }}</p>
@@ -85,7 +85,10 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import f1Api from '../services/f1Api';
+
+const router = useRouter();
 
 // Данные
 const loading = ref(true);
@@ -104,6 +107,23 @@ const driversCount = computed(() => drivers.value.length);
 const constructorsCount = computed(() => constructors.value.length);
 const circuitsCount = computed(() => circuits.value.length);
 const racesCount = computed(() => calendar.value.length);
+
+// Навигация
+const goToDrivers = () => {
+  router.push('/drivers');
+};
+
+const goToConstructors = () => {
+  router.push('/constructors');
+};
+
+const goToCircuits = () => {
+  router.push('/circuits');
+};
+
+const goToRaces = () => {
+  router.push('/races');
+};
 
 // Вспомогательные функции
 const formatDate = (dateString) => {
@@ -300,6 +320,13 @@ onMounted(() => {
   border-radius: 10px;
   text-align: center;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.15);
 }
 
 .stat-card h3 {
