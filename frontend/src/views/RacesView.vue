@@ -8,40 +8,42 @@
         <p>Трасса: {{ race.Circuit.circuitName }}</p>
         <p>Дата: {{ formatDate(race.date) }}</p>
         <p>Страна: {{ race.Circuit.Location.country }}</p>
-        <button @click="viewRaceDetails(race.round)">Подробнее</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import f1Api from '../services/f1Api'; // вместо '@/services/f1Api'
+import { ref, onMounted } from 'vue';
+import f1Api from '../services/f1Api';
 
 export default {
   name: 'RacesView',
-  data() {
-    return {
-      races: [],
-      currentSeason: new Date().getFullYear()
-    };
-  },
-  async mounted() {
-    await this.loadData();
-  },
-  methods: {
-    async loadData() {
+  setup() {
+    const races = ref([]);
+    const currentSeason = ref(new Date().getFullYear());
+
+    const loadData = async () => {
       try {
-        this.races = await f1Api.getCalendar();
+        races.value = await f1Api.getCalendar();
       } catch (error) {
         console.error('Ошибка загрузки данных:', error);
       }
-    },
-    formatDate(dateString) {
+    };
+
+    const formatDate = (dateString) => {
       return new Date(dateString).toLocaleDateString('ru-RU');
-    },
-    viewRaceDetails(round) {
-      this.$router.push(`/race/${round}`);
-    }
+    };
+
+    onMounted(() => {
+      loadData();
+    });
+
+    return {
+      races,
+      currentSeason,
+      formatDate
+    };
   }
 };
 </script>

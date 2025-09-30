@@ -1,127 +1,89 @@
-// backend/migrations/migrate.js
-const db = require('../db/pool');
-const path = require('path');
-const fs = require('fs');
+const db = require('../db/db');
 
-const runMigrations = async () => {
-    console.log('🔄 Запуск миграций...');
-    
-    // Миграция 1: Основные таблицы
-    await runMigration(`
-        -- Таблица пользователей (уже есть, но добавим недостающие поля)
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            favorite_team TEXT,
-            favorite_driver TEXT,
-            avatar_url TEXT DEFAULT 'default-avatar.png',
-            is_moderator BOOLEAN DEFAULT FALSE,
-            is_banned BOOLEAN DEFAULT FALSE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        -- Таблица категорий форума
-        CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            description TEXT,
-            slug TEXT UNIQUE NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-
-        -- Таблица тем (постов)
-        CREATE TABLE IF NOT EXISTS topics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            content TEXT NOT NULL,
-            user_id INTEGER NOT NULL,
-            category_id INTEGER NOT NULL,
-            is_pinned BOOLEAN DEFAULT FALSE,
-            is_locked BOOLEAN DEFAULT FALSE,
-            views_count INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-            FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE
-        );
-
-        -- Таблица комментариев
-        CREATE TABLE IF NOT EXISTS comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT NOT NULL,
-            user_id INTEGER NOT NULL,
-            topic_id INTEGER NOT NULL,
-            parent_id INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-            FOREIGN KEY (topic_id) REFERENCES topics (id) ON DELETE CASCADE,
-            FOREIGN KEY (parent_id) REFERENCES comments (id) ON DELETE CASCADE
-        );
-          -- Таблица Гран-при
-         CREATE TABLE IF NOT EXISTS grand_prix (
+const createTables = () => {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      // Пользователи
+      db.run(`CREATE TABLE IF NOT EXISTS user (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        country TEXT NOT NULL,
-        track TEXT NOT NULL,
-        event_date DATETIME NOT NULL,
+        username VARCHAR(45) UNIQUE NOT NULL,
+        email VARCHAR(45) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        favorite_team VARCHAR(45),
+        favorite_driver VARCHAR(45),
+        is_moderator BOOLEAN DEFAULT 0,
+        is_banned BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        avatar_url VARCHAR(255)
+      )`);
+
+      // Категории
+      db.run(`CREATE TABLE IF NOT EXISTS category (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name VARCHAR(45) NOT NULL,
         description TEXT,
-        is_next BOOLEAN DEFAULT FALSE,
-        is_completed BOOLEAN DEFAULT FALSE,
+        slug VARCHAR(45) UNIQUE NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );  
-          -- Добавляем тестовые данные Гран-при
-         INSERT OR IGNORE INTO grand_prix (title, country, track, event_date, description) VALUES
-        ('Гран-при Бахрейна', 'Бахрейн', 'Международный автодром Бахрейна', '2024-03-02 15:00:00', 'Первый этап сезона 2024'),
-        ('Гран-при Саудовской Аравии', 'Саудовская Аравия', 'Джидда', '2024-03-09 18:00:00', 'Ночная гонка в Джидде'),
-        ('Гран-при Австралии', 'Австралия', 'Альберт-Парк', '2024-03-24 07:00:00', 'Гонка в Мельбурне');
-        
-    
+      )`);
 
-        -- Таблица лайков
-        CREATE TABLE IF NOT EXISTS likes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            topic_id INTEGER,
-            comment_id INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, topic_id, comment_id),
-            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-            FOREIGN KEY (topic_id) REFERENCES topics (id) ON DELETE CASCADE,
-            FOREIGN KEY (comment_id) REFERENCES comments (id) ON DELETE CASCADE
-        );
-        
+      // Темы
+      db.run(`CREATE TABLE IF NOT EXISTS topic (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title VARCHAR(45) NOT NULL,
+        content TEXT NOT NULL,
+        is_pinned BOOLEAN DEFAULT 0,
+        is_locked BOOLEAN DEFAULT 0,
+        views_count INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        user_id INTEGER NOT NULL,
+        category_id INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES user (id),
+        FOREIGN KEY (category_id) REFERENCES category (id)
+      )`);
 
-        -- Вставляем основные категории
-        INSERT OR IGNORE INTO categories (name, description, slug) VALUES
+      // Комментарии
+      db.run(`CREATE TABLE IF NOT EXISTS comment (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        parent_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        topic_id INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES user (id),
+        FOREIGN KEY (topic_id) REFERENCES topic (id),
+        FOREIGN KEY (parent_id) REFERENCES comment (id)
+      )`);
+      db.run(`CREATE TABLE IF NOT EXISTS grand_prix (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name VARCHAR(45) NOT NULL,
+  country VARCHAR(45) NOT NULL,
+  circuit VARCHAR(45) NOT NULL,
+  race_date DATE NOT NULL,
+  year INTEGER NOT NULL,
+  round VARCHAR(45) NOT NULL
+)`);
+
+      // Начальные данные
+      db.run(`INSERT OR IGNORE INTO category (name, description, slug) VALUES 
         ('Новости F1', 'Последние новости Формулы 1', 'news'),
-        ('Обсуждение Гран-При', 'Обсуждение этапов чемпионата', 'grand-prix'),
-        ('Команды и Пилоты', 'Обсуждение команд и пилотов', 'teams-drivers'),
-        ('Технический анализ', 'Технические обсуждения', 'technical'),
-        ('История F1', 'Исторические моменты', 'history'),
-        ('Для новичков', 'Вопросы и ответы для новичков', 'beginners');
-    `, '001_initial_schema');
-    
-
-    console.log('✅ Миграции успешно применены!');
-};
-
-const runMigration = (sql, migrationName) => {
-    return new Promise((resolve, reject) => {
-        console.log(`🔄 Применение миграции: ${migrationName}`);
-        db.exec(sql, (err) => {
-            if (err) {
-                console.error(`❌ Ошибка миграции ${migrationName}:`, err);
-                reject(err);
-            } else {
-                console.log(`✅ Миграция ${migrationName} успешна`);
-                resolve();
-            }
-        });
+        ('Обсуждения гонок', 'Обсуждения прошедших и будущих Гран-при', 'race-discussions'),
+        ('Технологии', 'Обсуждения технических аспектов', 'technology'),
+        ('Команды и пилоты', 'Обсуждения команд и пилотов', 'teams-drivers')
+      `, (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          console.log('Database migration completed successfully');
+          resolve();
+        }
+      });
     });
+  });
 };
 
-module.exports = { runMigrations };
+// Запуск миграции
+createTables().catch(console.error);
+
+module.exports = { createTables };

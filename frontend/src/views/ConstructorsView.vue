@@ -5,45 +5,37 @@
       <div v-for="constructor in constructors" :key="constructor.constructorId" class="constructor-card">
         <h3>{{ constructor.name }}</h3>
         <p>Национальность: {{ constructor.nationality }}</p>
-        <p>Пилоты: {{ getConstructorDrivers(constructor.constructorId).join(', ') }}</p>
-        <button @click="viewConstructorDetails(constructor.constructorId)">Подробнее</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import f1Api from '../services/f1Api'; // вместо '@/services/f1Api'
+import { ref, onMounted } from 'vue';
+import f1Api from '../services/f1Api';
 
 export default {
   name: 'ConstructorsView',
-  data() {
-    return {
-      constructors: [],
-      drivers: [],
-      currentSeason: new Date().getFullYear()
-    };
-  },
-  async mounted() {
-    await this.loadData();
-  },
-  methods: {
-    async loadData() {
+  setup() {
+    const constructors = ref([]);
+    const currentSeason = ref(new Date().getFullYear());
+
+    const loadData = async () => {
       try {
-        this.constructors = await f1Api.getConstructors();
-        this.drivers = await f1Api.getDrivers();
+        constructors.value = await f1Api.getConstructors();
       } catch (error) {
         console.error('Ошибка загрузки данных:', error);
       }
-    },
-    getConstructorDrivers(constructorId) {
-      return this.drivers
-        .filter(driver => driver.constructorId === constructorId)
-        .map(driver => `${driver.givenName} ${driver.familyName}`);
-    },
-    viewConstructorDetails(constructorId) {
-      this.$router.push(`/constructor/${constructorId}`);
-    }
+    };
+
+    onMounted(() => {
+      loadData();
+    });
+
+    return {
+      constructors,
+      currentSeason
+    };
   }
 };
 </script>

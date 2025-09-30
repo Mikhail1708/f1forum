@@ -85,10 +85,10 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter } from 'vue-router'; // ПРАВИЛЬНЫЙ ИМПОРТ
 import f1Api from '../services/f1Api';
 
-const router = useRouter();
+const router = useRouter(); // ПРАВИЛЬНОЕ ИСПОЛЬЗОВАНИЕ
 
 // Данные
 const loading = ref(true);
@@ -174,8 +174,8 @@ const loadData = async () => {
     constructors.value = constructorsData;
     circuits.value = circuitsData;
     calendar.value = calendarData;
-    driverStandings.value = driverStandingsData.slice(0, 10);
-    constructorStandings.value = constructorStandingsData.slice(0, 10);
+    driverStandings.value = driverStandingsData?.slice(0, 10) || [];
+    constructorStandings.value = constructorStandingsData?.slice(0, 10) || [];
     
     // Следующая гонка
     nextRace.value = await f1Api.getNextRace();
@@ -186,7 +186,14 @@ const loadData = async () => {
     
   } catch (error) {
     console.error('❌ Ошибка загрузки данных:', error);
-    // Можно добавить fallback на демо-данные при необходимости
+    // Fallback данные на случай ошибки API
+    currentSeason.value = 2024;
+    drivers.value = [];
+    constructors.value = [];
+    circuits.value = [];
+    calendar.value = [];
+    driverStandings.value = [];
+    constructorStandings.value = [];
   } finally {
     loading.value = false;
   }

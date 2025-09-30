@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const authController = require('../controllers/authController');
 const auth = require('../middleware/auth');
 
 // Импортируем контроллеры
@@ -7,9 +8,10 @@ const { register, login, getProfile } = require('../controllers/authController')
 const { getNextGrandPrix, getUpcomingEvents, getAllGrandPrix } = require('../controllers/grandPrixController');
 
 // Аутентификация
-router.post('/auth/register', register);
-router.post('/auth/login', login);
-router.get('/auth/profile', auth, getProfile);
+
+router.post('/register', authController.register);
+router.post('/login', authController.login);
+router.get('/profile', authenticateToken, authController.getProfile);
 
 // Гран-при маршруты
 router.get('/grand-prix/next', getNextGrandPrix);

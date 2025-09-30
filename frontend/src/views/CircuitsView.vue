@@ -6,37 +6,37 @@
         <h3>{{ circuit.circuitName }}</h3>
         <p>Страна: {{ circuit.Location.country }}</p>
         <p>Город: {{ circuit.Location.locality }}</p>
-        <button @click="viewCircuitDetails(circuit.circuitId)">Подробнее</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import f1Api from '../services/f1Api'; // вместо '@/services/f1Api'
+import { ref, onMounted } from 'vue';
+import f1Api from '../services/f1Api';
 
 export default {
   name: 'CircuitsView',
-  data() {
-    return {
-      circuits: [],
-      currentSeason: new Date().getFullYear()
-    };
-  },
-  async mounted() {
-    await this.loadData();
-  },
-  methods: {
-    async loadData() {
+  setup() {
+    const circuits = ref([]);
+    const currentSeason = ref(new Date().getFullYear());
+
+    const loadData = async () => {
       try {
-        this.circuits = await f1Api.getCircuits();
+        circuits.value = await f1Api.getCircuits();
       } catch (error) {
         console.error('Ошибка загрузки данных:', error);
       }
-    },
-    viewCircuitDetails(circuitId) {
-      this.$router.push(`/circuit/${circuitId}`);
-    }
+    };
+
+    onMounted(() => {
+      loadData();
+    });
+
+    return {
+      circuits,
+      currentSeason
+    };
   }
 };
 </script>

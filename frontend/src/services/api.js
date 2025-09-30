@@ -1,7 +1,6 @@
-// src/services/api.js
 import axios from 'axios';
 
-const API_BASE_URL = 'http://192.168.100.72:10002/api'; // Vite proxy поможет перенаправить запросы
+const API_BASE_URL = 'http://localhost:3000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -12,17 +11,24 @@ const api = axios.create({
 
 // Добавляем токен к каждому запросу
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
+  const token = localStorage.getItem('authToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-export const authAPI = {
-  register: (userData) => api.post('/auth/register', userData),
-  login: (credentials) => api.post('/auth/login', credentials),
-  getProfile: () => api.get('/auth/profile'),
-};
+// Обработка ошибок
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

@@ -1,107 +1,107 @@
-// backend/controllers/authController.js
-const db = require('../db/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-exports.register = async (req, res) => {
-    const { username, email, password } = req.body;
-
-    if (!username || !email || !password) {
-        return res.status(400).json({ message: 'Все поля обязательны для заполнения' });
-    }
-
+const authController = {
+  async register(req, res) {
     try {
-        const existingUser = await db.getAsync(
-            'SELECT id FROM users WHERE username = ? OR email = ?',
-            [username, email]
-        );
+      const { username, email, password, favorite_team, favorite_driver } = req.body;
+      
+      // Проверка существования пользователя
+      const existingUser = await User.findByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: 'User already exists' });
+      }
 
-        if (existingUser) {
-            let message = 'Пользователь с таким именем или email уже существует';
-            return res.status(409).json({ message });
+      // Хеширование пароля
+      const password_hash = await bcrypt.hash(password, 10);
+      
+      // Создание пользователя
+      const user = await User.create({
+        username,
+        email,
+        password_hash,
+        favorite_team,
+        favorite_driver
+      });
+
+      // Генерация JWT токена
+      const token = jwt.sign(
+        { userId: user.id }, 
+        process.env.JWT_SECRET || 'your_jwt_secret',
+        { expiresIn: '24h' }
+      );
+
+      res.status(201).json({
+        message: 'User registered successfully',
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          favorite_team: user.favorite_team,
+          favorite_driver: user.favorite_driver
         }
-
-        const saltRounds = 10;
-        const passwordHash = await bcrypt.hash(password, saltRounds);
-
-        const result = await db.runAsync(
-            `INSERT INTO users (username, email, password_hash) 
-             VALUES (?, ?, ?)`,
-            [username, email, passwordHash]
-        );
-
-        res.status(201).json({
-            message: 'Пользователь успешно зарегистрирован',
-            userId: result.id
-        });
-
-    } catch (err) {
-        console.error('Ошибка при регистрации:', err);
-        res.status(500).json({ message: 'Ошибка на сервере при регистрации' });
+      });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
+  },
+
+  async login(req, res) {
+    try {
+      const { email, password } = req.body;
+      
+      // Поиск пользователя
+      const user = await User.findByEmail(email);
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      // Проверка пароля
+      const validPassword = await bcrypt.compare(password, user.password_hash);
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      // Генерация JWT токена
+      const token = jwt.sign(
+        { userId: user.id },
+        process.env.JWT_SECRET || 'your_jwt_secret',
+        { expiresIn: '24h' }
+      );
+
+      res.json({
+        message: 'Login successful',
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          favorite_team: user.favorite_team,
+          favorite_driver: user.favorite_driver,
+          is_moderator: user.is_moderator
+        }
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+
+  async getProfile(req, res) {
+    try {
+      const user = await User.findById(req.userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.json({ user });
+    } catch (error) {
+      console.error('Profile error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
 };
 
-exports.login = async (req, res) => {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Email и пароль обязательны' });
-    }
-
-    try {
-        const user = await db.getAsync(
-            'SELECT * FROM users WHERE email = ?',
-            [email]
-        );
-
-        if (!user) {
-            return res.status(401).json({ message: 'Неверные учетные данные' });
-        }
-
-        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-        
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Неверные учетные данные' });
-        }
-
-        const token = jwt.sign(
-            { userId: user.id, email: user.email },
-            process.env.JWT_SECRET || 'fallback_secret',
-            { expiresIn: '24h' }
-        );
-
-        res.json({
-            message: 'Вход выполнен успешно',
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email
-            }
-        });
-
-    } catch (err) {
-        console.error('Ошибка при входе:', err);
-        res.status(500).json({ message: 'Ошибка сервера при входе' });
-    }
-};
-
-exports.getProfile = async (req, res) => {
-    try {
-        // Используем req.user.id из middleware (а не req.userId)
-        const user = await db.getAsync(
-            'SELECT id, username, email, created_at FROM users WHERE id = ?',
-            [req.user.id] // ← ИЗМЕНИЛОСЬ ЗДЕСЬ!
-        );
-
-        if (!user) {
-            return res.status(404).json({ message: 'Пользователь не найден' });
-        }
-
-        res.json({ user });
-
-    } catch (err) {
-        console.error('Ошибка при получении профиля:', err);
-        res.status(500).json({ message: 'Ошибка сервера' });
-    }
-};
+module.exports = authController;

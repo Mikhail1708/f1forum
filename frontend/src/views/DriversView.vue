@@ -7,43 +7,46 @@
         <div class="driver-name">{{ driver.givenName }} {{ driver.familyName }}</div>
         <div class="driver-team">{{ getConstructorName(driver.constructorId) }}</div>
         <div class="driver-nationality">{{ driver.nationality }}</div>
-        <button @click="viewDriverDetails(driver.driverId)">Подробнее</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import f1Api from '../services/f1Api'; // вместо '@/services/f1Api'
+import { ref, onMounted } from 'vue';
+import f1Api from '../services/f1Api';
 
 export default {
   name: 'DriversView',
-  data() {
-    return {
-      drivers: [],
-      constructors: [],
-      currentSeason: new Date().getFullYear()
-    };
-  },
-  async mounted() {
-    await this.loadData();
-  },
-  methods: {
-    async loadData() {
+  setup() {
+    const drivers = ref([]);
+    const constructors = ref([]);
+    const currentSeason = ref(new Date().getFullYear());
+
+    const loadData = async () => {
       try {
-        this.drivers = await f1Api.getDrivers();
-        this.constructors = await f1Api.getConstructors();
+        drivers.value = await f1Api.getDrivers();
+        constructors.value = await f1Api.getConstructors();
       } catch (error) {
         console.error('Ошибка загрузки данных:', error);
       }
-    },
-    getConstructorName(constructorId) {
-      const constructor = this.constructors.find(c => c.constructorId === constructorId);
+    };
+
+    const getConstructorName = (constructorId) => {
+      const constructor = constructors.value.find(c => c.constructorId === constructorId);
       return constructor ? constructor.name : 'Неизвестно';
-    },
-    viewDriverDetails(driverId) {
-      this.$router.push(`/driver/${driverId}`);
-    }
+    };
+
+    onMounted(() => {
+      loadData();
+    });
+
+    return {
+      drivers,
+      constructors,
+      currentSeason,
+      getConstructorName
+    };
   }
 };
 </script>

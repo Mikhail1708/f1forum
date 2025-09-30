@@ -1,31 +1,34 @@
 const express = require('express');
-const { runMigrations } = require('./migrations/migrate');
 const cors = require('cors');
-require('dotenv').config();
-
-// Импортируем роуты
-const routes = require('./routes/index');
+const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 10002;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Подключаем роуты
-app.use('/api', routes);
+// Импорт роутов
+const authRoutes = require('./routes/auth');
+const topicRoutes = require('./routes/topics');
+const commentRoutes = require('./routes/comments');
+const categoryRoutes = require('./routes/categories');
+const grandPrixRoutes = require('./routes/grandPrix');
 
-// Запуск сервера с миграциями
-app.listen(PORT, async () => {
-  console.log(`🚗 Сервер F1 Forum запущен на порту ${PORT}`);
-  console.log(`📍 http://192.168.100.72:${PORT}`);
-  
-  // Запускаем миграции при старте сервера
-  try {
-    await runMigrations();
-    console.log('✅ Миграции успешно выполнены');
-  } catch (error) {
-    console.error('❌ Ошибка при выполнении миграций:', error);
-  }
+// Роуты API
+app.use('/api/auth', authRoutes);
+app.use('/api/topics', topicRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/grand-prix', grandPrixRoutes);
+
+// Статические файлы (если нужно)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const PORT = process.env.PORT || 10002;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
+
+module.exports = app;
