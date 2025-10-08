@@ -160,7 +160,72 @@ export const useDiscussionsStore = defineStore('discussions', () => {
       throw err;
     }
   };
+const likeDiscussion = async (discussionId) => {
+  try {
+    const discussionIndex = discussions.value.findIndex(d => d.id === parseInt(discussionId));
+    if (discussionIndex !== -1) {
+      const discussion = discussions.value[discussionIndex];
+      const updatedDiscussion = {
+        ...discussion,
+        likes: (discussion.likes || 0) + 1,
+        likedBy: [...(discussion.likedBy || []), 'current_user'] // Временно
+      };
+      
+      // Обновляем массив
+      const updatedDiscussions = [...discussions.value];
+      updatedDiscussions[discussionIndex] = updatedDiscussion;
+      discussions.value = updatedDiscussions;
+      
+      // Сохраняем
+      saveDiscussionsToStorage(updatedDiscussions);
+      
+      return updatedDiscussion;
+    }
+  } catch (err) {
+    error.value = 'Ошибка при лайке обсуждения';
+    throw err;
+  }
+};
 
+// Лайк комментария
+const likeComment = async (discussionId, commentId) => {
+  try {
+    const discussionIndex = discussions.value.findIndex(d => d.id === parseInt(discussionId));
+    if (discussionIndex !== -1) {
+      const discussion = discussions.value[discussionIndex];
+      const commentIndex = discussion.comments.findIndex(c => c.id === parseInt(commentId));
+      
+      if (commentIndex !== -1) {
+        const comment = discussion.comments[commentIndex];
+        const updatedComment = {
+          ...comment,
+          likes: (comment.likes || 0) + 1
+        };
+        
+        const updatedComments = [...discussion.comments];
+        updatedComments[commentIndex] = updatedComment;
+        
+        const updatedDiscussion = {
+          ...discussion,
+          comments: updatedComments
+        };
+        
+        // Обновляем массив
+        const updatedDiscussions = [...discussions.value];
+        updatedDiscussions[discussionIndex] = updatedDiscussion;
+        discussions.value = updatedDiscussions;
+        
+        // Сохраняем
+        saveDiscussionsToStorage(updatedDiscussions);
+        
+        return updatedComment;
+      }
+    }
+  } catch (err) {
+    error.value = 'Ошибка при лайке комментария';
+    throw err;
+  }
+};
   // Поиск обсуждений
   const searchDiscussions = async (query) => {
     loading.value = true;
@@ -179,11 +244,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Очистка всех данных (для отладки)
-  const clearAllData = () => {
-    discussions.value = loadDiscussionsFromStorage(); // Сбрасываем к начальным данным
-    localStorage.removeItem('f1-forum-discussions');
-  };
+
 
   return {
     discussions,
@@ -195,6 +256,8 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     createDiscussion,
     addComment,
     searchDiscussions,
-    clearAllData
+    likeComment ,
+    likeDiscussion
+   
   };
 });

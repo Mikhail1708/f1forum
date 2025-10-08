@@ -22,7 +22,20 @@
         </div>
       </div>
     </div>
-
+<div class="section" v-if="previousRace">
+  <h2>🏁 Прошлый Гран-при</h2>
+  <div class="race-card previous-race" @click="goToRace(previousRace.round)">
+    <div class="race-badge">Прошлая гонка</div>
+    <h3>{{ previousRace.raceName }}</h3>
+    <div class="race-info">
+      <p><strong>Трасса:</strong> {{ previousRace.Circuit.circuitName }}</p>
+      <p><strong>Место:</strong> {{ previousRace.Circuit.Location.locality }}, {{ previousRace.Circuit.Location.country }}</p>
+      <p><strong>Дата:</strong> {{ formatDate(previousRace.date) }}</p>
+      <p><strong>Раунд:</strong> {{ previousRace.round }}</p>
+    </div>
+    <div class="view-results">Смотреть результаты →</div>
+  </div>
+</div>
     <!-- Чемпионат пилотов -->
     <div class="section">
       <h2>🏆 Чемпионат пилотов {{ currentSeason }}</h2>
@@ -101,6 +114,7 @@ const constructors = ref([]);
 const circuits = ref([]);
 const calendar = ref([]);
 const lastUpdate = ref('');
+const previousRace = ref(null);
 
 // Вычисляемые свойства
 const driversCount = computed(() => drivers.value.length);
@@ -123,6 +137,9 @@ const goToCircuits = () => {
 
 const goToRaces = () => {
   router.push('/races');
+};
+const goToRace = (round) => {
+  router.push(`/races/${round}`);
 };
 
 // Вспомогательные функции
@@ -179,7 +196,7 @@ const loadData = async () => {
     
     // Следующая гонка
     nextRace.value = await f1Api.getNextRace();
-    
+    previousRace.value = await f1Api.getPreviousRace();
     lastUpdate.value = new Date().toLocaleString('ru-RU');
     
     console.log('✅ Данные успешно загружены через Jolpi API');
@@ -329,6 +346,37 @@ onMounted(() => {
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
   cursor: pointer;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.previous-race {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-left: 4px solid #006f62;
+}
+
+.previous-race:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+.race-badge {
+  background: #006f62;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.view-results {
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  text-align: center;
+  color: #e10600;
+  font-weight: bold;
 }
 
 .stat-card:hover {

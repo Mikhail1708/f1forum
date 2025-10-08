@@ -116,19 +116,16 @@
           <p class="discussion-content">{{ truncateContent(discussion.content) }}</p>
           
           <div class="discussion-footer">
-            <div class="tags">
-              <span 
-                v-for="tag in discussion.tags" 
-                :key="tag" 
-                class="tag"
-              >
-                #{{ tag }}
-              </span>
-            </div>
-            <div class="stats">
-              <span class="comments">💬 {{ discussion.commentsCount || 0 }}</span>
-              <span class="views">👁️ {{ discussion.views || 0 }}</span>
-            </div>
+  <div class="tags">
+    <span v-for="tag in discussion.tags" :key="tag" class="tag">#{{ tag }}</span>
+  </div>
+  <div class="stats">
+    <button @click.stop="likeDiscussion(discussion.id)" class="like-btn">
+      👍 {{ discussion.likes || 0 }}
+    </button>
+    <span class="comments">💬 {{ discussion.commentsCount || 0 }}</span>
+    <span class="views">👁️ {{ discussion.views || 0 }}</span>
+  </div>
           </div>
         </div>
       </div>
@@ -183,7 +180,13 @@ const formatDate = (dateString) => {
     return 'неизвестно';
   }
 };
-
+const likeDiscussion = async (discussionId) => {
+  try {
+    await discussionsStore.likeDiscussion(discussionId);
+  } catch (error) {
+    console.error('Ошибка при лайке:', error);
+  }
+};
 const truncateContent = (content, length = 150) => {
   if (!content) return '';
   return content.length > length ? content.substring(0, length) + '...' : content;

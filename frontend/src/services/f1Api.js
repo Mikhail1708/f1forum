@@ -137,7 +137,44 @@ class F1ApiService {
             return data.RaceTable.Races[0]?.Results || [];
         });
     }
+// services/f1Api.js
+async getPreviousRace() {
+    try {
+        const calendar = await this.getCalendar();
+        const now = new Date();
+        
+        // Находим все прошедшие гонки
+        const pastRaces = calendar.filter(race => new Date(race.date) < now);
+        
+        // Сортируем по дате (последняя гонка первая)
+        pastRaces.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        return pastRaces[0] || null;
+    } catch (error) {
+        console.error('Error getting previous race:', error);
+        return null;
+    }
+}
 
+async getRaceResults(round) {
+    try {
+        const response = await this.api.get(`/current/${round}/results.json`);
+        return response.data.MRData.RaceTable.Races[0]?.Results || [];
+    } catch (error) {
+        console.error(`Error getting race results for round ${round}:`, error);
+        return [];
+    }
+}
+
+async getQualifyingResults(round) {
+    try {
+        const response = await this.api.get(`/current/${round}/qualifying.json`);
+        return response.data.MRData.RaceTable.Races[0]?.QualifyingResults || [];
+    } catch (error) {
+        console.error(`Error getting qualifying results for round ${round}:`, error);
+        return [];
+    }
+}
     // Получение информации о пилоте
     async getDriverDetails(driverId) {
         return this.cachedRequest(`driver-${driverId}`, async () => {
@@ -153,6 +190,51 @@ class F1ApiService {
             return data.ConstructorTable.Constructors[0];
         });
     }
+    // services/f1Api.js
+
+async getRaceResults(round, season = 'current') {
+    try {
+        const response = await this.api.get(`/${season}/${round}/results.json`);
+        const results = response.data.MRData.RaceTable.Races[0]?.Results || [];
+        
+        // Если нет данных, используем mock
+        if (results.length === 0 && round === '18') {
+            console.log('Using mock race results for Singapore GP');
+            return this.getMockRaceResults();
+        }
+        
+        return results;
+    } catch (error) {
+        console.error(`Error getting race results for round ${round}:`, error);
+        // При ошибке используем mock данные для Сингапура
+        if (round === '18') {
+            return this.getMockRaceResults();
+        }
+        return [];
+    }
+}
+
+async getQualifyingResults(round, season = 'current') {
+    try {
+        const response = await this.api.get(`/${season}/${round}/qualifying.json`);
+        const results = response.data.MRData.RaceTable.Races[0]?.QualifyingResults || [];
+        
+        // Если нет данных, используем mock
+        if (results.length === 0 && round === '18') {
+            console.log('Using mock qualifying results for Singapore GP');
+            return this.getMockQualifyingResults();
+        }
+        
+        return results;
+    } catch (error) {
+        console.error(`Error getting qualifying results for round ${round}:`, error);
+        // При ошибке используем mock данные для Сингапура
+        if (round === '18') {
+            return this.getMockQualifyingResults();
+        }
+        return [];
+    }
+}
 
     // Очистка кэша
     clearCache() {
