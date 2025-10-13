@@ -243,7 +243,65 @@ class F1ApiService {
             return data.DriverTable.Drivers[0];
         });
     }
+// Добавьте эти методы в класс F1ApiService в f1Api.js
 
+// Получение результатов пилота за сезон
+async getDriverSeasonResults(driverId, season = 'current') {
+    try {
+        console.log(`🎯 Запрос результатов пилота ${driverId} за сезон ${season}`);
+        const data = await this.makeRequest(`/${season}/drivers/${driverId}/results.json`);
+        const races = data.RaceTable.Races || [];
+        
+        return races.map(race => ({
+            round: race.round,
+            raceName: race.raceName,
+            date: race.date,
+            Circuit: race.Circuit,
+            Results: race.Results?.[0] || null
+        }));
+    } catch (error) {
+        console.error(`❌ Ошибка получения результатов пилота ${driverId}:`, error);
+        return [];
+    }
+}
+
+// Получение квалификационных результатов пилота за сезон
+async getDriverQualifyingResults(driverId, season = 'current') {
+    try {
+        console.log(`🎯 Запрос квалификации пилота ${driverId} за сезон ${season}`);
+        const data = await this.makeRequest(`/${season}/drivers/${driverId}/qualifying.json`);
+        const races = data.RaceTable.Races || [];
+        
+        return races.map(race => ({
+            round: race.round,
+            raceName: race.raceName,
+            QualifyingResults: race.QualifyingResults?.[0] || null
+        }));
+    } catch (error) {
+        console.error(`❌ Ошибка получения квалификации пилота ${driverId}:`, error);
+        return [];
+    }
+}
+
+// Получение статистики пилота
+async getDriverStats(driverId) {
+    try {
+        console.log(`📊 Запрос статистики пилота ${driverId}`);
+        const data = await this.makeRequest(`/drivers/${driverId}/driverStandings.json`);
+        const standingsLists = data.StandingsTable.StandingsLists || [];
+        
+        return standingsLists.map(season => ({
+            season: season.season,
+            position: season.DriverStandings?.[0]?.position,
+            points: season.DriverStandings?.[0]?.points,
+            wins: season.DriverStandings?.[0]?.wins,
+            Constructors: season.DriverStandings?.[0]?.Constructors || []
+        }));
+    } catch (error) {
+        console.error(`❌ Ошибка получения статистики пилота ${driverId}:`, error);
+        return [];
+    }
+}
     // Получение информации о команде
     async getConstructorDetails(constructorId) {
         return this.cachedRequest(`constructor-${constructorId}`, async () => {

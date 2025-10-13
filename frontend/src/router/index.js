@@ -71,6 +71,11 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+  path: '/drivers/:id',
+  name: 'DriverDetails',
+  component: () => import('../views/DriverDetailsView.vue')
+},
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('../views/ProfileView.vue'),
