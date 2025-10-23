@@ -1,20 +1,19 @@
 <template>
-  <div class="profile-view">
+  <div class="profile">
     <h1>Профиль пользователя</h1>
-    <div v-if="authStore.user" class="profile-info">
+    <div v-if="authStore.user" class="user-info">
       <p><strong>Имя пользователя:</strong> {{ authStore.user.username }}</p>
       <p><strong>Email:</strong> {{ authStore.user.email }}</p>
-      <p><strong>Любимая команда:</strong> {{ authStore.user.favorite_team || 'Не указана' }}</p>
-      <p><strong>Любимый пилот:</strong> {{ authStore.user.favorite_driver || 'Не указан' }}</p>
+      <p><strong>Роль:</strong> {{ authStore.user.role }}</p>
+      <p><strong>Администратор:</strong> {{ authStore.isAdmin ? 'Да' : 'Нет' }}</p>
     </div>
-    <button @click="authStore.logout()" class="logout-btn">Выйти</button>
   </div>
 </template>
 
 <script setup>
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore } from '../stores/auth'
 
-const authStore = useAuthStore();
+const authStore = useAuthStore()
 </script>
 
 <style scoped>

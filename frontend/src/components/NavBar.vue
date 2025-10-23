@@ -13,7 +13,10 @@
       <router-link to="/races" class="nav-link">Гонки</router-link>
       
       <template v-if="authStore.isAuthenticated">
-        <router-link to="/predictions" class="nav-link">Мои прогнозы</router-link>
+        <!-- Добавьте эту строку для админки -->
+        <router-link v-if="isAdmin" to="/admin" class="nav-link admin-link">⚙️ Админка</router-link>
+
+  
         <router-link to="/profile" class="nav-link">Профиль</router-link>
         <span class="user-greeting">Привет, {{ authStore.user?.username }}</span>
         <button @click="handleLogout" class="logout-btn">Выйти</button>
@@ -30,9 +33,15 @@
 <script setup>
 import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
+import { computed } from 'vue';
 
 const authStore = useAuthStore();
 const router = useRouter();
+
+// Добавляем вычисляемое свойство для проверки роли администратора
+const isAdmin = computed(() => {
+  return authStore.user?.role === 'admin';
+});
 
 const handleLogout = () => {
   authStore.logout();
@@ -41,7 +50,6 @@ const handleLogout = () => {
 </script>
 
 <style scoped>
-/* Стили остаются такими же как в предыдущей версии */
 .navbar {
   display: flex;
   justify-content: space-between;
@@ -79,6 +87,16 @@ const handleLogout = () => {
 
 .nav-link.router-link-active {
   background-color: rgba(255,255,255,0.2);
+}
+
+/* Стиль для ссылки админки */
+.admin-link {
+  background-color: #2c3e50;
+  border: 1px solid #34495e;
+}
+
+.admin-link:hover {
+  background-color: #34495e;
 }
 
 .register-btn {

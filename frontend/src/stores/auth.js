@@ -1,83 +1,100 @@
-import { defineStore } from 'pinia';
+// src/stores/auth.js
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import api from '../services/api'
 
-export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    user: null,
-    isAuthenticated: false,
-    loading: false,
-    error: null
-  }),
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref(null)
+  const token = ref(null)
 
-  getters: {
-    getUser: (state) => state.user,
-    isLoggedIn: (state) => state.isAuthenticated,
-  },
-
-  actions: {
-    async initialize() {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        this.isAuthenticated = true;
-        try {
-          const userData = localStorage.getItem('user');
-          if (userData) {
-            this.user = JSON.parse(userData);
-          }
-        } catch (error) {
-          console.error('Error initializing auth:', error);
-          this.logout();
-        }
-      }
-    },
-
-    async login(credentials) {
-      this.loading = true;
-      this.error = null;
+  // Инициализация из localStorage
+  const initialize = () => {
+    const storedToken = localStorage.getItem('authToken')
+    const storedUser = localStorage.getItem('user')
+    
+    console.log('Initializing auth store from localStorage:')
+    console.log('Stored token:', storedToken ? storedToken.substring(0, 20) + '...' : 'No token')
+    console.log('Stored user:', storedUser)
+    
+    if (storedToken) {
+      token.value = storedToken
+    }
+    
+    if (storedUser) {
       try {
-        console.log('Login attempt:', credentials);
-        
-        // Заглушка для демо
-        this.user = {
-          username: credentials.email.split('@')[0],
-          email: credentials.email
-        };
-        this.isAuthenticated = true;
-        
-        localStorage.setItem('authToken', 'demo-token');
-        localStorage.setItem('user', JSON.stringify(this.user));
-        
-        return { success: true };
+        user.value = JSON.parse(storedUser)
+        console.log('Parsed user:', user.value)
       } catch (error) {
-        this.error = error.message || 'Login failed';
-        throw error;
-      } finally {
-        this.loading = false;
+        console.error('Error parsing stored user:', error)
+        localStorage.removeItem('user')
       }
-    },
-
-    async register(userData) {
-      this.loading = true;
-      this.error = null;
-      try {
-        console.log('Register attempt:', userData);
-        return { success: true };
-      } catch (error) {
-        this.error = error.message || 'Registration failed';
-        throw error;
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    async getProfile() {
-      return this.user;
-    },
-
-    logout() {
-      this.user = null;
-      this.isAuthenticated = false;
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
     }
   }
-});
+
+  const isAuthenticated = computed(() => {
+    const hasToken = !!token.value
+    console.log('isAuthenticated computed:', hasToken)
+    return hasToken
+  })
+
+  const isAdmin = computed(() => {
+    const userIsAdmin = user.value?.role === 'admin'
+    console.log('isAdmin computed:', userIsAdmin, 'User role:', user.value?.role)
+    return userIsAdmin
+  })
+
+  const login = async (credentials) => {
+    try {
+      console.log('Starting login process...')
+      const response = await api.post('/auth/login', credentials)
+      console.log('Login response:', response.data)
+      
+      if (response.data.token && response.data.user) {
+        token.value = response.data.token
+        user.value = response.data.user
+        
+        // Сохраняем в localStorage
+        localStorage.setItem('authToken', token.value)
+        localStorage.setItem('user', JSON.stringify(user.value))
+        
+        console.log('Login successful - stored data:')
+        console.log('Token in localStorage:', localStorage.getItem('authToken')?.substring(0, 20) + '...')
+        console.log('User in localStorage:', localStorage.getItem('user'))
+        console.log('Store state - user:', user.value)
+        console.log('Store state - isAdmin:', isAdmin.value)
+        
+        return { success: true }
+      } else {
+        console.error('No token or user in response')
+        return { success: false, error: 'Invalid response from server' }
+      }
+    } catch (error) {
+      console.error('Login store error:', error)
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Login failed' 
+      }
+    }
+  }
+
+  const logout = () => {
+    console.log('Logging out...')
+    token.value = null
+    user.value = null
+    localStorage.removeItem('authToken')
+    localStorage.removeItem('user')
+  }
+
+  // Инициализируем при создании хранилища
+  initialize()
+
+  return {
+    user,
+    token,
+    isAuthenticated,
+    isAdmin,
+    login,
+    logout,
+    initialize
+  }
+})

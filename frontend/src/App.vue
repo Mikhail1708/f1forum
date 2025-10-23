@@ -15,15 +15,12 @@ import NavBar from './components/NavBar.vue';
 const authStore = useAuthStore();
 
 // При загрузке приложения пытаемся получить профиль пользователя, если есть токен
-onMounted(async () => {
-  if (authStore.isAuthenticated) {
-    try {
-      await authStore.getProfile();
-    } catch (error) {
-      console.error('Ошибка загрузки профиля:', error);
-    }
-  }
-});
+onMounted(() => {
+  console.log('App mounted - User:', authStore.user)
+  console.log('App mounted - isAdmin:', authStore.isAdmin)
+  console.log('App mounted - isAuthenticated:', authStore.isAuthenticated)
+  console.log('LocalStorage user:', localStorage.getItem('user'))
+})
 </script>
 
 <style>

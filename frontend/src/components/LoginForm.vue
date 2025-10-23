@@ -1,93 +1,151 @@
 <template>
-  <div class="login-form">
-    <h2>Вход в F1 Forum</h2>
-    <form @submit.prevent="handleLogin">
-      <div class="form-group">
-        <label>Email:</label>
-        <input v-model="credentials.email" type="email" required>
-      </div>
-      <div class="form-group">
-        <label>Пароль:</label>
-        <input v-model="credentials.password" type="password" required>
-      </div>
-      <button type="submit" :disabled="loading">{{ loading ? 'Вход...' : 'Войти' }}</button>
-      <div v-if="error" class="error-message">{{ error }}</div>
-    </form>
-  </div>
+  <form @submit.prevent="handleLogin" class="login-form">
+    <div class="form-group">
+      <label for="email">Email:</label>
+      <input
+        id="email"
+        v-model="credentials.email"
+        type="email"
+        required
+        placeholder="Введите ваш email"
+      >
+    </div>
+    
+    <div class="form-group">
+      <label for="password">Пароль:</label>
+      <input
+        id="password"
+        v-model="credentials.password"
+        type="password"
+        required
+        placeholder="Введите ваш пароль"
+      >
+    </div>
+
+    <div v-if="error" class="error-message">
+      {{ error }}
+    </div>
+
+    <button type="submit" :disabled="loading" class="login-btn">
+      {{ loading ? 'Вход...' : 'Войти' }}
+    </button>
+
+    <div class="debug-info" v-if="debug">
+      <h4>Отладочная информация:</h4>
+      <p>Email: {{ credentials.email }}</p>
+      <p>Loading: {{ loading }}</p>
+      <p>Error: {{ error }}</p>
+    </div>
+  </form>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useAuthStore } from '../stores/auth';
-import { useRouter } from 'vue-router';
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
-const authStore = useAuthStore();
-const router = useRouter();
+const router = useRouter()
+const authStore = useAuthStore()
 
-const credentials = ref({ email: '', password: '' });
-const loading = ref(false);
-const error = ref('');
+const credentials = ref({
+  email: 'admin@f1forum.com', //预设管理员邮箱方便测试
+  password: 'admin123'
+})
+const loading = ref(false)
+const error = ref('')
+const debug = ref(true) // Включить отладочную информацию
 
 const handleLogin = async () => {
-  loading.value = true;
-  error.value = '';
+  loading.value = true
+  error.value = ''
+
   try {
-    await authStore.login(credentials.value);
-    router.push('/'); // Перенаправление на главную после входа
+    console.log('Attempting login with:', credentials.value)
+    
+    const result = await authStore.login(credentials.value)
+    
+    if (result.success) {
+      console.log('Login successful, user:', authStore.user)
+      console.log('Is admin:', authStore.isAdmin)
+      console.log('Token in localStorage:', localStorage.getItem('authToken'))
+      console.log('User in localStorage:', localStorage.getItem('user'))
+      
+      // Перенаправление на главную страницу
+      router.push('/')
+    } else {
+      error.value = result.error || 'Ошибка входа'
+      console.error('Login failed:', result.error)
+    }
   } catch (err) {
-    error.value = err.error || 'Ошибка входа';
+    error.value = 'Произошла ошибка при входе'
+    console.error('Login error:', err)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 </script>
 
 <style scoped>
-.register-form {
+.login-form {
   max-width: 400px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 2rem;
 }
 
 .form-group {
-  margin-bottom: 15px;
+  margin-bottom: 1rem;
 }
 
-label {
+.form-group label {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 0.5rem;
   font-weight: bold;
 }
 
-input, select {
+.form-group input {
   width: 100%;
-  padding: 8px;
-  border: 1px solid #ccc;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
   border-radius: 4px;
+  font-size: 1rem;
 }
 
-button {
+.login-btn {
   width: 100%;
-  padding: 10px;
-  background-color: #e10600;
+  padding: 0.75rem;
+  background: #3498db;
   color: white;
   border: none;
   border-radius: 4px;
+  font-size: 1rem;
   cursor: pointer;
 }
 
-button:disabled {
-  background-color: #ccc;
+.login-btn:disabled {
+  background: #bdc3c7;
   cursor: not-allowed;
 }
 
 .error-message {
-  color: #e10600;
-  margin-top: 10px;
+  color: #e74c3c;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  background: #fdf2f2;
+  border: 1px solid #e74c3c;
+  border-radius: 4px;
 }
 
-.success-message {
-  color: green;
-  margin-top: 10px;
+.debug-info {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.debug-info h4 {
+  margin: 0 0 0.5rem 0;
+  color: #6c757d;
 }
 </style>
