@@ -22,26 +22,34 @@ const adminController = {
         });
       });
 
-      // Последние действия
+      // Последние действия - ИСПРАВЛЕННЫЙ ЗАПРОС
       const recentActivity = await new Promise((resolve, reject) => {
         const sql = `
-          SELECT 
-            'user' as type, username as title, 'зарегистрировался' as description, created_at 
-            FROM users 
-          UNION ALL
-          SELECT 
-            'topic' as type, title, 'создал тему' as description, created_at 
-            FROM topics 
-            JOIN users ON topics.user_id = users.id
-          UNION ALL
-          SELECT 
-            'comment' as type, 
-            SUBSTR(content, 1, 50) as title, 
-            'оставил комментарий' as description, 
-            comments.created_at 
-            FROM comments 
-            JOIN users ON comments.user_id = users.id
-          ORDER BY created_at DESC 
+          SELECT * FROM (
+            SELECT 
+              'user' as type, 
+              username as title, 
+              'зарегистрировался' as description, 
+              created_at as activity_date
+              FROM users 
+            UNION ALL
+            SELECT 
+              'topic' as type, 
+              title, 
+              'создал тему' as description, 
+              topics.created_at as activity_date
+              FROM topics 
+              JOIN users ON topics.user_id = users.id
+            UNION ALL
+            SELECT 
+              'comment' as type, 
+              SUBSTR(content, 1, 50) as title, 
+              'оставил комментарий' as description, 
+              comments.created_at as activity_date
+              FROM comments 
+              JOIN users ON comments.user_id = users.id
+          ) 
+          ORDER BY activity_date DESC 
           LIMIT 10
         `;
         

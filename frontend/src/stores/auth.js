@@ -43,6 +43,39 @@ export const useAuthStore = defineStore('auth', () => {
     return userIsAdmin
   })
 
+  // ДОБАВЛЯЕМ МЕТОД REGISTER
+  const register = async (userData) => {
+    try {
+      console.log('Starting registration process...', userData)
+      const response = await api.post('/auth/register', userData)
+      console.log('Registration response:', response.data)
+      
+      if (response.data.token && response.data.user) {
+        token.value = response.data.token
+        user.value = response.data.user
+        
+        // Сохраняем в localStorage
+        localStorage.setItem('authToken', token.value)
+        localStorage.setItem('user', JSON.stringify(user.value))
+        
+        console.log('Registration successful - stored data:')
+        console.log('Token in localStorage:', localStorage.getItem('authToken')?.substring(0, 20) + '...')
+        console.log('User in localStorage:', localStorage.getItem('user'))
+        
+        return { success: true }
+      } else {
+        console.error('No token or user in response')
+        return { success: false, error: 'Invalid response from server' }
+      }
+    } catch (error) {
+      console.error('Registration store error:', error)
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Registration failed' 
+      }
+    }
+  }
+
   const login = async (credentials) => {
     try {
       console.log('Starting login process...')
@@ -93,6 +126,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isAuthenticated,
     isAdmin,
+    register, // ДОБАВЛЯЕМ В ЭКСПОРТ
     login,
     logout,
     initialize

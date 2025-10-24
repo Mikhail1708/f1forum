@@ -89,6 +89,7 @@
 import { ref, computed, reactive } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
+import api from '../services/api'; // Добавьте этот импорт
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -199,13 +200,40 @@ const handleRegister = async () => {
   error.value = '';
 
   try {
-    await authStore.register(form.value);
-    success.value = true;
-    setTimeout(() => {
-      router.push('/');
-    }, 2000);
+    // Временно используем прямой запрос для отладки
+    console.log('Отправка данных регистрации:', form.value);
+    
+    const response = await api.post('/auth/register', form.value);
+    console.log('Ответ сервера:', response.data);
+    
+    if (response.data.message === 'User registered successfully') {
+      // Сохраняем данные через store
+      await authStore.login({
+        email: form.value.email,
+        password: form.value.password
+      });
+      
+      success.value = true;
+      setTimeout(() => {
+        router.push('/');
+      }, 2000);
+    } else {
+      error.value = response.data.error || 'Ошибка регистрации';
+    }
   } catch (err) {
-    error.value = err.error || 'Ошибка регистрации';
+    console.error('Ошибка регистрации:', err);
+    console.error('Детали ошибки:', err.response?.data);
+    
+    // Более детальная обработка ошибок
+    if (err.response?.data?.error) {
+      error.value = err.response.data.error;
+    } else if (err.code === 'ERR_NETWORK') {
+      error.value = 'Ошибка соединения с сервером. Проверьте, запущен ли бэкенд.';
+    } else if (err.response?.status === 500) {
+      error.value = 'Внутренняя ошибка сервера';
+    } else {
+      error.value = err.message || 'Ошибка регистрации';
+    }
   } finally {
     loading.value = false;
   }
@@ -213,6 +241,7 @@ const handleRegister = async () => {
 </script>
 
 <style scoped>
+/* Стили остаются без изменений */
 .register-form {
   max-width: 400px;
   margin: 0 auto;

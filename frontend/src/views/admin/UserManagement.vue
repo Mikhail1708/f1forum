@@ -11,7 +11,10 @@
       </div>
     </div>
 
-    <div class="users-table-container">
+    <div v-if="loading" class="loading">Загрузка пользователей...</div>
+    <div v-else-if="error" class="error-message">{{ error }}</div>
+
+    <div v-else class="users-table-container">
       <table class="users-table">
         <thead>
           <tr>
@@ -55,26 +58,30 @@
             <td>
               <div class="action-buttons">
                 <button 
-                  v-if="user.status === 'active'" 
+                  v-if="user.status === 'active' && user.id !== currentUserId" 
                   @click="banUser(user.id)"
                   class="btn btn-warning"
+                  :disabled="actionLoading"
                 >
-                  Забанить
+                  {{ actionLoading ? '...' : 'Забанить' }}
                 </button>
                 <button 
-                  v-if="user.status === 'banned'" 
+                  v-if="user.status === 'banned' && user.id !== currentUserId" 
                   @click="unbanUser(user.id)"
                   class="btn btn-success"
+                  :disabled="actionLoading"
                 >
-                  Разбанить
+                  {{ actionLoading ? '...' : 'Разбанить' }}
                 </button>
                 <button 
+                  v-if="user.id !== currentUserId"
                   @click="deleteUser(user.id)"
                   class="btn btn-danger"
-                  :disabled="user.id === currentUserId"
+                  :disabled="actionLoading"
                 >
-                  Удалить
+                  {{ actionLoading ? '...' : 'Удалить' }}
                 </button>
+                <span v-if="user.id === currentUserId" class="current-user-hint">Это вы</span>
               </div>
             </td>
           </tr>
@@ -82,7 +89,19 @@
       </table>
     </div>
 
-    <div v-if="loading" class="loading">Загрузка...</div>
+    <!-- Модальное окно подтверждения -->
+    <div v-if="showConfirmModal" class="modal-overlay">
+      <div class="modal">
+        <h3>{{ confirmTitle }}</h3>
+        <p>{{ confirmMessage }}</p>
+        <div class="modal-actions">
+          <button @click="confirmAction" class="btn btn-danger" :disabled="actionLoading">
+            {{ actionLoading ? 'Выполнение...' : 'Подтвердить' }}
+          </button>
+          <button @click="cancelAction" class="btn btn-secondary">Отмена</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -95,7 +114,15 @@ const authStore = useAuthStore();
 const users = ref([]);
 const searchQuery = ref('');
 const loading = ref(false);
+const actionLoading = ref(false);
+const error = ref('');
 const currentUserId = ref(authStore.user?.id);
+
+// Модальное окно подтверждения
+const showConfirmModal = ref(false);
+const confirmTitle = ref('');
+const confirmMessage = ref('');
+let pendingAction = null;
 
 const filteredUsers = computed(() => {
   if (!searchQuery.value) return users.value;
@@ -113,74 +140,146 @@ onMounted(async () => {
 
 const loadUsers = async () => {
   loading.value = true;
+  error.value = '';
   try {
     const response = await api.get('/admin/users');
     if (response.data.success) {
       users.value = response.data.users;
+    } else {
+      error.value = response.data.error || 'Ошибка загрузки пользователей';
     }
   } catch (error) {
     console.error('Ошибка загрузки пользователей:', error);
+    error.value = 'Не удалось загрузить список пользователей';
   } finally {
     loading.value = false;
   }
 };
 
 const updateUserRole = async (user) => {
+  actionLoading.value = true;
   try {
-    const response = await api.put(`/admin/users/${user.id}/role`, { role: user.role });
+    const response = await api.put(`/admin/users/${user.id}/role`, { 
+      role: user.role 
+    });
+    
     if (response.data.success) {
       console.log('Роль пользователя обновлена');
+    } else {
+      error.value = response.data.error || 'Ошибка обновления роли';
+      // Откатываем изменение
+      await loadUsers();
     }
   } catch (error) {
     console.error('Ошибка обновления роли:', error);
-    // Откатываем изменение в UI если ошибка
+    error.value = 'Ошибка обновления роли пользователя';
+    // Откатываем изменение
     await loadUsers();
+  } finally {
+    actionLoading.value = false;
   }
 };
 
-const banUser = async (userId) => {
-  if (confirm('Забанить пользователя?')) {
-    try {
-      await api.put(`/admin/users/${userId}/status`, { status: 'banned' });
-      await loadUsers(); // Перезагружаем список
-    } catch (error) {
-      console.error('Ошибка бана пользователя:', error);
-    }
-  }
+const banUser = (userId) => {
+  confirmTitle.value = 'Блокировка пользователя';
+  confirmMessage.value = 'Вы уверены, что хотите заблокировать этого пользователя?';
+  pendingAction = async () => {
+    await updateUserStatus(userId, 'banned');
+  };
+  showConfirmModal.value = true;
 };
 
-const unbanUser = async (userId) => {
+const unbanUser = (userId) => {
+  confirmTitle.value = 'Разблокировка пользователя';
+  confirmMessage.value = 'Вы уверены, что хотите разблокировать этого пользователя?';
+  pendingAction = async () => {
+    await updateUserStatus(userId, 'active');
+  };
+  showConfirmModal.value = true;
+};
+
+const deleteUser = (userId) => {
+  confirmTitle.value = 'Удаление пользователя';
+  confirmMessage.value = 'ВНИМАНИЕ: Это действие нельзя отменить. Вы уверены, что хотите удалить этого пользователя?';
+  pendingAction = async () => {
+    await performDeleteUser(userId);
+  };
+  showConfirmModal.value = true;
+};
+
+const updateUserStatus = async (userId, status) => {
+  actionLoading.value = true;
   try {
-    await api.put(`/admin/users/${userId}/status`, { status: 'active' });
-    await loadUsers(); // Перезагружаем список
+    const response = await api.put(`/admin/users/${userId}/status`, { 
+      status: status 
+    });
+    
+    if (response.data.success) {
+      // Обновляем статус локально без перезагрузки всего списка
+      const userIndex = users.value.findIndex(u => u.id === userId);
+      if (userIndex !== -1) {
+        users.value[userIndex].status = status;
+      }
+    } else {
+      error.value = response.data.error || 'Ошибка обновления статуса';
+    }
   } catch (error) {
-    console.error('Ошибка разбана пользователя:', error);
+    console.error('Ошибка обновления статуса:', error);
+    error.value = 'Ошибка обновления статуса пользователя';
+  } finally {
+    actionLoading.value = false;
   }
 };
 
-const deleteUser = async (userId) => {
-  if (confirm('Удалить пользователя? Это действие нельзя отменить.')) {
-    try {
-      // TODO: Добавить API для удаления пользователей если нужно
-      console.log('Удаление пользователя:', userId);
+const performDeleteUser = async (userId) => {
+  actionLoading.value = true;
+  try {
+    // Используем эндпоинт для удаления пользователя
+    const response = await api.delete(`/admin/users/${userId}`);
+    
+    if (response.data.success) {
+      // Удаляем пользователя из списка
       users.value = users.value.filter(u => u.id !== userId);
-    } catch (error) {
-      console.error('Ошибка удаления пользователя:', error);
+    } else {
+      error.value = response.data.error || 'Ошибка удаления пользователя';
     }
+  } catch (error) {
+    console.error('Ошибка удаления пользователя:', error);
+    error.value = 'Ошибка удаления пользователя';
+  } finally {
+    actionLoading.value = false;
   }
+};
+
+const confirmAction = async () => {
+  if (pendingAction) {
+    await pendingAction();
+  }
+  showConfirmModal.value = false;
+  pendingAction = null;
+};
+
+const cancelAction = () => {
+  showConfirmModal.value = false;
+  pendingAction = null;
 };
 
 const getStatusText = (status) => {
   const statusMap = {
     active: 'Активен',
-    banned: 'Забанен',
+    banned: 'Заблокирован',
     suspended: 'Приостановлен'
   };
   return statusMap[status] || status;
 };
 
 const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString('ru-RU');
+  if (!dateString) return '-';
+  try {
+    return new Date(dateString).toLocaleDateString('ru-RU');
+  } catch {
+    return '-';
+  }
 };
 </script>
 
@@ -190,6 +289,8 @@ const formatDate = (dateString) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .search-input {
@@ -197,6 +298,7 @@ const formatDate = (dateString) => {
   border: 1px solid #ddd;
   border-radius: 4px;
   width: 300px;
+  font-size: 14px;
 }
 
 .users-table-container {
@@ -204,11 +306,13 @@ const formatDate = (dateString) => {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  overflow-x: auto;
 }
 
 .users-table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 800px;
 }
 
 .users-table th,
@@ -222,11 +326,13 @@ const formatDate = (dateString) => {
   background: #f8f9fa;
   font-weight: 600;
   color: #2c3e50;
+  font-size: 14px;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
+  gap: 0.25rem;
 }
 
 .username {
@@ -239,70 +345,196 @@ const formatDate = (dateString) => {
 }
 
 .role-select {
-  padding: 0.25rem 0.5rem;
+  padding: 0.4rem 0.5rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   background: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.role-select:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
 }
 
 .status-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  border-radius: 20px;
   font-size: 0.8rem;
   font-weight: bold;
+  display: inline-block;
+  text-align: center;
+  min-width: 100px;
 }
 
 .status-badge.active {
   background: #d4edda;
   color: #155724;
+  border: 1px solid #c3e6cb;
 }
 
 .status-badge.banned {
   background: #f8d7da;
   color: #721c24;
+  border: 1px solid #f5c6cb;
 }
 
 .status-badge.suspended {
   background: #fff3cd;
   color: #856404;
+  border: 1px solid #ffeaa7;
 }
 
 .action-buttons {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .btn {
-  padding: 0.25rem 0.5rem;
+  padding: 0.5rem 0.75rem;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .btn-warning {
-  background: #fff3cd;
-  color: #856404;
+  background: #ffc107;
+  color: #212529;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #e0a800;
 }
 
 .btn-success {
-  background: #d4edda;
-  color: #155724;
+  background: #28a745;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #218838;
 }
 
 .btn-danger {
-  background: #f8d7da;
-  color: #721c24;
+  background: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
 }
 
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.current-user-hint {
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-style: italic;
 }
 
 .loading {
   text-align: center;
+  padding: 3rem;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.error-message {
+  background: #f8d7da;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: 6px;
+  text-align: center;
+  margin: 2rem 0;
+  border: 1px solid #f5c6cb;
+}
+
+/* Модальное окно */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
   padding: 2rem;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.modal h3 {
+  margin: 0 0 1rem 0;
+  color: #2c3e50;
+  font-size: 1.3rem;
+}
+
+.modal p {
+  margin: 0 0 1.5rem 0;
   color: #7f8c8d;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .search-input {
+    width: 100%;
+  }
+  
+  .users-table-container {
+    border-radius: 0;
+    margin: 0 -20px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .btn {
+    width: 100%;
+  }
 }
 </style>
