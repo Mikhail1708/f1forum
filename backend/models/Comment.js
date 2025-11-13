@@ -26,6 +26,11 @@ class Comment {
     return rows[0];
   }
 
+  // Создание ответа (алиас для create)
+  static async createReply(commentData) {
+    return await this.create(commentData);
+  }
+
   // Получение комментариев для темы
   static async findByTopicId(topicId) {
     // Проверяем валидность ID
@@ -86,6 +91,106 @@ class Comment {
       ...row,
       author: { username: row.author_username || 'Unknown' }
     }));
+  }
+
+  // Получение комментария по ID
+  static async findById(id) {
+    // Проверяем валидность ID
+    const commentId = parseInt(id);
+    if (isNaN(commentId) || commentId <= 0) {
+      console.error('Invalid comment ID for findById:', id);
+      return null;
+    }
+
+    const { rows } = await db.query(`
+      SELECT 
+        c.*,
+        u.username as author_username
+      FROM comments c
+      LEFT JOIN users u ON c.user_id = u.id
+      WHERE c.id = $1
+    `, [commentId]);
+    
+    if (rows.length === 0) return null;
+    
+    const row = rows[0];
+    return {
+      ...row,
+      author: { username: row.author_username || 'Unknown' }
+    };
+  }
+
+  // Обновление комментария
+  static async update(id, updateData) {
+    const { content } = updateData;
+    
+    // Проверяем валидность ID
+    const commentId = parseInt(id);
+    if (isNaN(commentId) || commentId <= 0) {
+      throw new Error('Invalid comment ID');
+    }
+
+    const { rows } = await db.query(
+      `UPDATE comments 
+       SET content = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $2 
+       RETURNING *`,
+      [content, commentId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error('Comment not found');
+    }
+
+    return rows[0];
+  }
+
+  // Удаление комментария
+  static async delete(id) {
+    // Проверяем валидность ID
+    const commentId = parseInt(id);
+    if (isNaN(commentId) || commentId <= 0) {
+      throw new Error('Invalid comment ID');
+    }
+
+    try {
+      // Начинаем транзакцию
+      await db.query('BEGIN');
+
+      // Удаляем лайки комментария
+      await db.query('DELETE FROM comment_likes WHERE comment_id = $1', [commentId]);
+      
+      // Если это родительский комментарий, удаляем его ответы
+      const { rows: childComments } = await db.query(
+        'SELECT id FROM comments WHERE parent_id = $1',
+        [commentId]
+      );
+      
+      if (childComments.length > 0) {
+        // Удаляем лайки дочерних комментариев
+        await db.query(
+          'DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE parent_id = $1)',
+          [commentId]
+        );
+        // Удаляем дочерние комментарии
+        await db.query('DELETE FROM comments WHERE parent_id = $1', [commentId]);
+      }
+      
+      // Удаляем сам комментарий
+      const { rows } = await db.query(
+        'DELETE FROM comments WHERE id = $1 RETURNING *',
+        [commentId]
+      );
+
+      // Коммитим транзакцию
+      await db.query('COMMIT');
+      
+      return rows[0];
+    } catch (error) {
+      // Откатываем транзакцию при ошибке
+      await db.query('ROLLBACK');
+      throw error;
+    }
   }
 
   // Лайк комментария

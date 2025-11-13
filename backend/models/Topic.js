@@ -135,6 +135,69 @@ class Topic {
     );
     return parseInt(rows[0].count);
   }
+
+  // Обновление топика
+  static async update(id, updateData) {
+    const { title, content, tags = [] } = updateData;
+    
+    // Проверяем валидность ID
+    const topicId = parseInt(id);
+    if (isNaN(topicId) || topicId <= 0) {
+      throw new Error('Invalid topic ID');
+    }
+
+    const { rows } = await db.query(
+      `UPDATE topics 
+       SET title = $1, content = $2, tags = $3, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $4 
+       RETURNING *`,
+      [title, content, JSON.stringify(tags), topicId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error('Topic not found');
+    }
+
+    const updatedTopic = rows[0];
+    updatedTopic.tags = tags;
+    
+    return updatedTopic;
+  }
+
+  // Удаление топика
+  static async delete(id) {
+    // Проверяем валидность ID
+    const topicId = parseInt(id);
+    if (isNaN(topicId) || topicId <= 0) {
+      throw new Error('Invalid topic ID');
+    }
+
+    try {
+      // Начинаем транзакцию
+      await db.query('BEGIN');
+
+      // Удаляем лайки топика
+      await db.query('DELETE FROM topic_likes WHERE topic_id = $1', [topicId]);
+      
+      // Удаляем комментарии топика
+      await db.query('DELETE FROM comments WHERE topic_id = $1', [topicId]);
+      
+      // Удаляем сам топик
+      const { rows } = await db.query(
+        'DELETE FROM topics WHERE id = $1 RETURNING *',
+        [topicId]
+      );
+
+      // Коммитим транзакцию
+      await db.query('COMMIT');
+      
+      return rows[0];
+    } catch (error) {
+      // Откатываем транзакцию при ошибке
+      await db.query('ROLLBACK');
+      throw error;
+    }
+  }
 }
 
 module.exports = Topic;

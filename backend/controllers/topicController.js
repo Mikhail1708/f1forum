@@ -1,5 +1,6 @@
 const Topic = require('../models/Topic');
 const Comment = require('../models/Comment');
+const db = require('../db/postgres');
 
 const topicController = {
   async getAllTopics(req, res) {
@@ -91,6 +92,102 @@ const topicController = {
       res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
   },
+
+ // Обновление обсуждения
+async updateTopic(req, res) {
+  try {
+    const { id } = req.params;
+    const { title, content, tags = [] } = req.body;
+    const user_id = req.userId;
+
+    // Проверяем валидность ID
+    const topicId = parseInt(id);
+    const userId = parseInt(user_id);
+    
+    if (isNaN(topicId) || topicId <= 0) {
+      return res.status(400).json({ error: 'Invalid topic ID' });
+    }
+
+    if (!title || !content) {
+      return res.status(400).json({ error: 'Title and content are required' });
+    }
+
+    console.log(`Updating topic ${topicId} by user ${userId}`);
+
+    // Проверяем, существует ли топик и принадлежит ли пользователю
+    const existingTopic = await Topic.findById(topicId);
+    if (!existingTopic) {
+      return res.status(404).json({ error: 'Topic not found' });
+    }
+
+    if (existingTopic.user_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized to update this topic' });
+    }
+
+    // Обновляем топик через модель
+    const updatedTopic = await Topic.update(topicId, {
+      title,
+      content,
+      tags
+    });
+
+    res.json({
+      message: 'Topic updated successfully',
+      topic: updatedTopic
+    });
+
+  } catch (error) {
+    console.error('Update topic error:', error);
+    res.status(500).json({ error: 'Internal server error: ' + error.message });
+  }
+},
+
+// Удаление обсуждения
+async deleteTopic(req, res) {
+  try {
+    const { id } = req.params;
+    const user_id = req.userId;
+
+    // Проверяем валидность ID
+    const topicId = parseInt(id);
+    const userId = parseInt(user_id);
+    
+    if (isNaN(topicId) || topicId <= 0) {
+      return res.status(400).json({ error: 'Invalid topic ID' });
+    }
+
+    console.log(`🗑️ Deleting topic ${topicId} by user ${userId}`);
+
+    // Проверяем, существует ли топик
+    const existingTopic = await Topic.findById(topicId);
+    if (!existingTopic) {
+      console.log(`❌ Topic ${topicId} not found`);
+      return res.status(404).json({ error: 'Topic not found' });
+    }
+
+    // Проверяем права доступа
+    if (existingTopic.user_id !== userId) {
+      console.log(`❌ User ${userId} not authorized to delete topic ${topicId}`);
+      return res.status(403).json({ error: 'Not authorized to delete this topic' });
+    }
+
+    console.log(`✅ Authorization passed, deleting topic ${topicId}`);
+
+    // Удаляем топик через модель
+    const deletedTopic = await Topic.delete(topicId);
+    
+    console.log(`✅ Topic ${topicId} deleted successfully`);
+
+    res.json({ 
+      message: 'Topic deleted successfully',
+      deletedTopic: deletedTopic
+    });
+
+  } catch (error) {
+    console.error('❌ Delete topic error:', error);
+    res.status(500).json({ error: 'Internal server error: ' + error.message });
+  }
+},
 
   async likeTopic(req, res) {
     try {
