@@ -1,140 +1,67 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import api from '../services/api'
+// frontend/stores/auth.js
+import { defineStore } from 'pinia';
+import api from '../services/api';
 
-export const useAuthStore = defineStore('auth', () => {
-  const user = ref(null)
-  const token = ref(null)
+export const useAuthStore = defineStore('auth', {
+  state: () => ({
+    user: null,
+    token: localStorage.getItem('token'),
+    isAuthenticated: false,
+  }),
 
-  // Инициализация из localStorage
-  const initialize = () => {
-    const storedToken = localStorage.getItem('authToken')
-    const storedUser = localStorage.getItem('user')
-    
-    console.log('Initializing auth store from localStorage:')
-    console.log('Stored token:', storedToken ? storedToken.substring(0, 20) + '...' : 'No token')
-    console.log('Stored user:', storedUser)
-    
-    if (storedToken) {
-      token.value = storedToken
-    }
-    
-    if (storedUser) {
+  actions: {
+    async login(credentials) {
       try {
-        user.value = JSON.parse(storedUser)
-        console.log('Parsed user:', user.value)
+        const response = await api.post('/auth/login', credentials);
+        
+        if (response.data.success) {
+          this.token = response.data.token;
+          this.user = response.data.user;
+          this.isAuthenticated = true;
+          
+          localStorage.setItem('token', this.token);
+          
+          // Добавляем токен в заголовки по умолчанию
+          api.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+          
+          return { success: true };
+        }
       } catch (error) {
-        console.error('Error parsing stored user:', error)
-        localStorage.removeItem('user')
+        console.error('Login error:', error);
+        return { 
+          success: false, 
+          error: error.response?.data?.error || 'Login failed' 
+        };
       }
-    }
-  }
+    },
 
-  const isAuthenticated = computed(() => {
-    const hasToken = !!token.value
-    console.log('isAuthenticated computed:', hasToken)
-    return hasToken
-  })
-
-  const isAdmin = computed(() => {
-    const userIsAdmin = user.value?.role === 'admin'
-    console.log('isAdmin computed:', userIsAdmin, 'User role:', user.value?.role)
-    return userIsAdmin
-  })
-
-  // Регистрация
-  const register = async (userData) => {
-    try {
-      console.log('Starting registration process...', userData)
-      const response = await api.post('/auth/register', userData)
-      console.log('Registration response:', response.data)
+    async checkAuth() {
+      if (!this.token) return false;
       
-      if (response.data.token && response.data.user) {
-        token.value = response.data.token
-        user.value = response.data.user
+      try {
+        // Добавляем токен в заголовки перед проверкой
+        api.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
         
-        // Сохраняем в localStorage
-        localStorage.setItem('authToken', token.value)
-        localStorage.setItem('user', JSON.stringify(user.value))
+        const response = await api.get('/auth/me');
         
-        console.log('Registration successful - stored data:')
-        console.log('Token in localStorage:', localStorage.getItem('authToken')?.substring(0, 20) + '...')
-        console.log('User in localStorage:', localStorage.getItem('user'))
-        
-        return { success: true }
-      } else {
-        console.error('No token or user in response')
-        return { success: false, error: 'Invalid response from server' }
+        if (response.data.success) {
+          this.user = response.data.user;
+          this.isAuthenticated = true;
+          return true;
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        this.logout();
+        return false;
       }
-    } catch (error) {
-      console.error('Registration store error:', error)
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'Registration failed' 
-      }
+    },
+
+    logout() {
+      this.user = null;
+      this.token = null;
+      this.isAuthenticated = false;
+      localStorage.removeItem('token');
+      delete api.defaults.headers.common['Authorization'];
     }
   }
-
-  // Логин
-  const login = async (credentials) => {
-    try {
-      console.log('Starting login process...')
-      const response = await api.post('/auth/login', credentials)
-      console.log('Login response:', response.data)
-      
-      if (response.data.token && response.data.user) {
-        token.value = response.data.token
-        user.value = response.data.user
-        
-        // Сохраняем в localStorage
-        localStorage.setItem('authToken', token.value)
-        localStorage.setItem('user', JSON.stringify(user.value))
-        
-        console.log('Login successful - stored data:')
-        console.log('Token in localStorage:', localStorage.getItem('authToken')?.substring(0, 20) + '...')
-        console.log('User in localStorage:', localStorage.getItem('user'))
-        console.log('Store state - user:', user.value)
-        console.log('Store state - isAdmin:', isAdmin.value)
-        
-        return { success: true }
-      } else {
-        console.error('No token or user in response')
-        return { success: false, error: 'Invalid response from server' }
-      }
-    } catch (error) {
-      console.error('Login store error:', error)
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'Login failed' 
-      }
-    }
-  }
-
-  const logout = () => {
-    console.log('Logging out...')
-    token.value = null
-    user.value = null
-    localStorage.removeItem('authToken')
-    localStorage.removeItem('user')
-  }
-
-  // Получение текущего пользователя (для использования в других хранилищах)
-  const getCurrentUser = () => {
-    return user.value;
-  };
-
-  // Инициализируем при создании хранилища
-  initialize()
-
-  return {
-    user,
-    token,
-    isAuthenticated,
-    isAdmin,
-    register,
-    login,
-    logout,
-    initialize,
-    getCurrentUser
-  }
-})
+});

@@ -1,24 +1,101 @@
+// backend/controllers/authController.js
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const db = require('../db/postgres');
 
 const authController = {
+  async login(req, res) {
+    try {
+      const { email, password } = req.body;
+
+      console.log('Login attempt for:', email);
+
+      // Проверяем существование пользователя
+      const { rows } = await db.query(
+        'SELECT * FROM users WHERE email = $1',
+        [email]
+      );
+
+      if (rows.length === 0) {
+        console.log('User not found:', email);
+        return res.status(401).json({ 
+          success: false, 
+          error: 'Invalid credentials' 
+        });
+      }
+
+      const user = rows[0];
+
+      // Проверяем пароль
+      const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+      
+      if (!isPasswordValid) {
+        console.log('Invalid password for:', email);
+        return res.status(401).json({ 
+          success: false, 
+          error: 'Invalid credentials' 
+        });
+      }
+
+      // Проверяем статус пользователя
+      if (user.status === 'banned') {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Account is banned' 
+        });
+      }
+
+      // Обновляем информацию о логине
+      await db.query(
+        'UPDATE users SET last_login = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = $1',
+        [user.id]
+      );
+
+      // Генерируем токен
+      const token = jwt.sign(
+        { userId: user.id },
+        process.env.JWT_SECRET || 'fallback_secret',
+        { expiresIn: '7d' }
+      );
+
+      // Убираем пароль из ответа
+      const { password_hash, ...userWithoutPassword } = user;
+
+      console.log('Login successful for:', email);
+
+      res.json({
+        success: true,
+        token,
+        user: userWithoutPassword,
+        message: 'Login successful'
+      });
+
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error' 
+      });
+    }
+  },
+
   async register(req, res) {
     try {
       const { username, email, password, favorite_team, favorite_driver } = req.body;
 
-      console.log('Registration attempt:', { username, email });
-      console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
-
-      // Валидация
-      if (!username || !email || !password) {
-        return res.status(400).json({ error: 'Username, email and password are required' });
-      }
+      console.log('Registration attempt for:', email);
 
       // Проверяем, существует ли пользователь
-      const existingUser = await User.findByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({ error: 'User already exists' });
+      const existingUser = await db.query(
+        'SELECT id FROM users WHERE email = $1 OR username = $2',
+        [email, username]
+      );
+
+      if (existingUser.rows.length > 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'User already exists' 
+        });
       }
 
       // Хешируем пароль
@@ -26,111 +103,67 @@ const authController = {
       const password_hash = await bcrypt.hash(password, saltRounds);
 
       // Создаем пользователя
-      const user = await User.create({
-        username,
-        email,
-        password_hash,
-        favorite_team,
-        favorite_driver
-      });
-
-      // Создаем JWT токен с правильным секретом
-      const token = jwt.sign(
-        { userId: user.id },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' } // Увеличиваем время жизни токена
+      const { rows } = await db.query(
+        `INSERT INTO users (username, email, password_hash, favorite_team, favorite_driver) 
+         VALUES ($1, $2, $3, $4, $5) 
+         RETURNING id, username, email, role, status, favorite_team, favorite_driver, created_at`,
+        [username, email, password_hash, favorite_team, favorite_driver]
       );
 
-      // Обновляем информацию о входе
-      await User.updateLoginInfo(user.id);
+      const newUser = rows[0];
 
-      console.log('User registered successfully:', user.username);
+      // Генерируем токен
+      const token = jwt.sign(
+        { userId: newUser.id },
+        process.env.JWT_SECRET || 'fallback_secret',
+        { expiresIn: '7d' }
+      );
+
+      console.log('Registration successful for:', email);
 
       res.status(201).json({
-        message: 'User registered successfully',
+        success: true,
         token,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          favorite_team: user.favorite_team,
-          favorite_driver: user.favorite_driver
-        }
+        user: newUser,
+        message: 'Registration successful'
       });
+
     } catch (error) {
       console.error('Registration error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error' 
+      });
     }
   },
 
-  async login(req, res) {
+  async getMe(req, res) {
     try {
-      const { email, password } = req.body;
-
-      console.log('Login attempt for email:', email);
-      console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Not set');
-
-      if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
-      }
-
-      // Находим пользователя
-      const user = await User.findByEmail(email);
-      if (!user) {
-        return res.status(400).json({ error: 'Invalid credentials' });
-      }
-
-      // Проверяем пароль
-      const isPasswordValid = await bcrypt.compare(password, user.password_hash);
-      if (!isPasswordValid) {
-        return res.status(400).json({ error: 'Invalid credentials' });
-      }
-
-      // Создаем JWT токен с правильным секретом
-      const token = jwt.sign(
-        { userId: user.id },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' } // Увеличиваем время жизни токена
+      const { rows } = await db.query(
+        `SELECT id, username, email, role, status, favorite_team, favorite_driver, 
+                created_at, last_login, avatar_url 
+         FROM users WHERE id = $1`,
+        [req.userId]
       );
 
-      // Обновляем информацию о входе
-      await User.updateLoginInfo(user.id);
-
-      console.log('User logged in successfully:', user.username);
+      if (rows.length === 0) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'User not found' 
+        });
+      }
 
       res.json({
-        message: 'Login successful',
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          favorite_team: user.favorite_team,
-          favorite_driver: user.favorite_driver
-        }
+        success: true,
+        user: rows[0]
       });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  },
 
-  async verify(req, res) {
-    try {
-      // Если middleware auth прошел успешно, пользователь авторизован
-      res.json({
-        user: {
-          id: req.user.id,
-          username: req.user.username,
-          email: req.user.email,
-          role: req.user.role
-        }
-      });
     } catch (error) {
-      console.error('Verify error:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      console.error('Get me error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Internal server error' 
+      });
     }
   }
 };

@@ -1,61 +1,50 @@
+// backend/middleware/auth.js
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const db = require('../db/postgres');
 
 const auth = async (req, res, next) => {
   try {
     const authHeader = req.header('Authorization');
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ 
-        error: 'No token provided, authorization denied' 
-      });
+      return res.status(401).json({ error: 'No token, authorization denied' });
     }
 
     const token = authHeader.replace('Bearer ', '');
     
     if (!token) {
-      return res.status(401).json({ 
-        error: 'No token, authorization denied' 
-      });
+      return res.status(401).json({ error: 'No token, authorization denied' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
-    
-    if (!user) {
-      return res.status(401).json({ 
-        error: 'Token is not valid - user not found' 
-      });
-    }
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
+      
+      // Проверяем, существует ли пользователь в базе
+      const { rows } = await db.query(
+        'SELECT id, username, email, role, status FROM users WHERE id = $1',
+        [decoded.userId]
+      );
+      
+      if (rows.length === 0) {
+        return res.status(401).json({ error: 'User not found' });
+      }
 
-    if (user.status === 'banned') {
-      return res.status(403).json({ 
-        error: 'Account is banned' 
-      });
-    }
+      const user = rows[0];
+      
+      if (user.status === 'banned') {
+        return res.status(401).json({ error: 'User account is banned' });
+      }
 
-    req.userId = decoded.userId;
-    req.user = user;
-    
-    next();
+      req.userId = user.id;
+      req.user = user;
+      next();
+    } catch (jwtError) {
+      console.error('JWT verification error:', jwtError);
+      return res.status(401).json({ error: 'Token is not valid' });
+    }
   } catch (error) {
-    console.error('Auth middleware error:', error.message);
-    
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        error: 'Invalid token - please login again' 
-      });
-    }
-    
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        error: 'Token expired - please login again' 
-      });
-    }
-    
-    res.status(500).json({ 
-      error: 'Server error in authentication' 
-    });
+    console.error('Auth middleware error:', error);
+    res.status(500).json({ error: 'Server error in authentication' });
   }
 };
 

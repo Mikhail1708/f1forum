@@ -1,72 +1,55 @@
+// backend/app.js
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
-
-// Загружаем .env файл
-require('dotenv').config();
-
-console.log('🚀 Starting F1 Forum Backend with PostgreSQL...');
+const corsMiddleware = require('./middleware/cors');
+const auth = require('./middleware/auth');
 
 const app = express();
 
-// Подробная настройка CORS
-app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+// Используем простой CORS middleware
+app.use(corsMiddleware);
 
-// Обработка preflight запросов
-app.options('*', cors());
-
-// Middleware
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Импорт роутов
-const authRoutes = require('./routes/auth');
-const topicRoutes = require('./routes/topics');
-const commentRoutes = require('./routes/comments');
-const categoryRoutes = require('./routes/categories');
-const grandPrixRoutes = require('./routes/grandPrix');
-const adminRoutes = require('./routes/admin');
+// Логирование всех запросов
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
 
-// Роуты API
-app.use('/api/auth', authRoutes);
-app.use('/api/topics', topicRoutes);
-app.use('/api/comments', commentRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/grand-prix', grandPrixRoutes);
-app.use('/api/admin', adminRoutes);
+// Public routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/topics', require('./routes/topics')); // ДОБАВЬТЕ ЭТУ СТРОКУ
+app.use('/api/comments', require('./routes/comments')); // ДОБАВЬТЕ ЭТУ СТРОКУ
 
-// Статические файлы
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Server is running', 
+    timestamp: new Date().toISOString() 
+  });
+});
 
-// Роут для проверки работы сервера
-app.get('/api/health', async (req, res) => {
-  try {
-    const db = require('./db/postgres');
-    await db.query('SELECT 1');
-    res.json({ 
-      status: 'OK', 
-      message: 'Server is running with PostgreSQL',
-      database: 'Connected'
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      status: 'ERROR', 
-      message: 'Database connection failed',
-      error: error.message 
-    });
-  }
+// Protected routes
+app.use('/api/admin', auth, require('./routes/admin'));
+
+// Error handling
+app.use((err, req, res, next) => {
+  console.error('Error:', err.stack);
+  res.status(500).json({ 
+    success: false, 
+    error: 'Something went wrong!' 
+  });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 PostgreSQL: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
-  console.log(`🌐 Health check: http://localhost:${PORT}/api/health`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🌐 Available routes:`);
+  console.log(`   GET  /api/health`);
+  console.log(`   GET  /api/topics`);
+  console.log(`   POST /api/topics`);
+  console.log(`   GET  /api/topics/:id`);
+  console.log(`   GET  /api/comments/:topicId`);
+  console.log(`   POST /api/comments/:topicId`);
 });
-
-module.exports = app;

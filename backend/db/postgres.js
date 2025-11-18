@@ -1,15 +1,15 @@
+// backend/db/postgres.js
 const { Pool } = require('pg');
-require('dotenv').config();
 
 const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'f1_forum',
-  password: process.env.DB_PASSWORD || 'password',
   port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'f1_forum',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || '123',
 });
 
-// Проверка подключения
+// Тестируем подключение
 pool.on('connect', () => {
   console.log('✅ Connected to PostgreSQL database');
 });
@@ -20,5 +20,4 @@ pool.on('error', (err) => {
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
-  pool
 };

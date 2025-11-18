@@ -97,7 +97,22 @@ CREATE TABLE IF NOT EXISTS backups (
     type TEXT DEFAULT 'full',
     notes TEXT
 );
+-- ДОБАВИТЬ В create_tables.sql:
 
+-- Таблица логов активности
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(100) NOT NULL,
+    description TEXT,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Индекс для логов активности
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
 -- Создание администратора
 INSERT INTO users (username, email, password_hash, role, is_moderator) 
 VALUES ('admin', 'admin@f1forum.com', '$2a$10$8K1p/a0dRTlB0.Z6CQc.eeQMj6K.Ck6QcJ.z.B.X.2x5LdQ3qYvW2', 'admin', true)

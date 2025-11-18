@@ -20,34 +20,34 @@
         <div class="stat-card">
           <div class="stat-icon">👥</div>
           <div class="stat-info">
-            <h3>{{ stats.totalUsers }}</h3>
+            <h3>{{ stats.totalUsers || 0 }}</h3>
             <p>Пользователей</p>
-            <small>+{{ stats.newUsersToday }} сегодня</small>
+            <small>+{{ stats.newUsersToday || 0 }} сегодня</small>
           </div>
         </div>
         
         <div class="stat-card">
           <div class="stat-icon">📝</div>
           <div class="stat-info">
-            <h3>{{ stats.totalTopics }}</h3>
+            <h3>{{ stats.totalTopics || 0 }}</h3>
             <p>Тем</p>
-            <small>+{{ stats.newTopicsToday }} сегодня</small>
+            <small>+{{ stats.newTopicsToday || 0 }} сегодня</small>
           </div>
         </div>
         
         <div class="stat-card">
           <div class="stat-icon">💬</div>
           <div class="stat-info">
-            <h3>{{ stats.totalComments }}</h3>
+            <h3>{{ stats.totalComments || 0 }}</h3>
             <p>Комментариев</p>
-            <small>+{{ stats.newCommentsToday }} сегодня</small>
+            <small>+{{ stats.newCommentsToday || 0 }} сегодня</small>
           </div>
         </div>
         
         <div class="stat-card">
           <div class="stat-icon">🏁</div>
           <div class="stat-info">
-            <h3>{{ stats.totalRaces }}</h3>
+            <h3>{{ stats.totalRaces || 0 }}</h3>
             <p>Гонок в базе</p>
           </div>
         </div>
@@ -93,20 +93,37 @@ onMounted(async () => {
   await loadStats();
 });
 
+// В AdminDashboard.vue в методе loadStats
 const loadStats = async () => {
   try {
     loading.value = true;
+    error.value = '';
+    
+    console.log('🔄 Загрузка статистики...');
     const response = await api.get('/admin/stats');
+    
+    console.log('📊 Полный ответ от сервера:', response.data);
     
     if (response.data.success) {
       stats.value = response.data.stats;
-      recentActivity.value = response.data.recentActivity;
+      recentActivity.value = response.data.recentActivity || [];
+      
+      console.log('✅ Статистика загружена:', stats.value);
+      console.log('✅ Активность загружена:', recentActivity.value);
+      
+      // Проверим каждое поле отдельно
+      console.log('🔍 Детали статистики:');
+      console.log('   👥 Пользователей:', stats.value.totalUsers);
+      console.log('   📝 Тем:', stats.value.totalTopics);
+      console.log('   💬 Комментариев:', stats.value.totalComments);
+      console.log('   🏁 Гонок:', stats.value.totalRaces);
     } else {
-      error.value = 'Ошибка загрузки статистики';
+      error.value = response.data.error || 'Ошибка загрузки статистики';
+      console.error('❌ Ошибка в ответе:', response.data);
     }
   } catch (err) {
-    console.error('Error loading stats:', err);
-    error.value = 'Не удалось загрузить статистику';
+    console.error('❌ Ошибка загрузки статистики:', err);
+    error.value = 'Не удалось загрузить статистику: ' + err.message;
   } finally {
     loading.value = false;
   }
@@ -163,10 +180,6 @@ const downloadReport = async () => {
     // Создаем PDF документ
     const doc = new jsPDF();
     
-    // Добавляем поддержку кириллицы
-    // Устанавливаем стандартный шрифт, который поддерживает кириллицу
-    doc.setFont('helvetica');
-    
     // Заголовок отчета
     doc.setFontSize(20);
     doc.setTextColor(40, 40, 40);
@@ -182,7 +195,7 @@ const downloadReport = async () => {
     doc.setTextColor(40, 40, 40);
     doc.text('Статистика системы', 20, 65);
     
-    // Таблица статистики с использованием autoTable
+    // Таблица статистики
     autoTable(doc, {
       startY: 75,
       head: [['Показатель', 'Всего', 'За сегодня']],
@@ -194,7 +207,7 @@ const downloadReport = async () => {
       ],
       theme: 'grid',
       headStyles: {
-        fillColor: [225, 6, 0], // F1 красный цвет
+        fillColor: [225, 6, 0],
         textColor: 255,
         fontStyle: 'bold'
       },
@@ -204,58 +217,6 @@ const downloadReport = async () => {
         cellPadding: 3,
       },
     });
-
-    // Последняя активность
-    const finalY = doc.lastAutoTable.finalY + 20;
-    doc.setFontSize(16);
-    doc.text('Последняя активность', 20, finalY);
-
-    if (recentActivity.value.length > 0) {
-      const activityData = recentActivity.value.map(activity => [
-        activity.title,
-        activity.description,
-        formatDateForPDF(activity.activity_date)
-      ]);
-
-      autoTable(doc, {
-        startY: finalY + 10,
-        head: [['Пользователь', 'Действие', 'Дата']],
-        body: activityData,
-        theme: 'grid',
-        headStyles: {
-          fillColor: [40, 40, 40],
-          textColor: 255,
-          fontStyle: 'bold'
-        },
-        styles: {
-          font: 'helvetica',
-          fontSize: 10,
-          cellPadding: 2,
-        },
-        columnStyles: {
-          0: { cellWidth: 40 },
-          1: { cellWidth: 60 },
-          2: { cellWidth: 40 }
-        }
-      });
-    } else {
-      doc.setFontSize(12);
-      doc.text('Активность не найдена', 20, finalY + 15);
-    }
-
-    // Футер
-    const pageCount = doc.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(10);
-      doc.setTextColor(150, 150, 150);
-      doc.text(
-        `Страница ${i} из ${pageCount}`,
-        doc.internal.pageSize.width / 2,
-        doc.internal.pageSize.height - 10,
-        { align: 'center' }
-      );
-    }
 
     // Сохраняем PDF
     doc.save(`f1-forum-report-${new Date().toISOString().split('T')[0]}.pdf`);
@@ -267,19 +228,7 @@ const downloadReport = async () => {
     loading.value = false;
   }
 };
-const formatDateForPDF = (dateString) => {
-  if (!dateString) return 'Неизвестно';
-  
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU') + ' ' + date.toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch (error) {
-    return 'Неверная дата';
-  }
-};
+
 </script>
 
 <style scoped>

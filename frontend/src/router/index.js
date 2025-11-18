@@ -1,3 +1,4 @@
+// frontend/src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useDiscussionsStore } from '../stores/discussionsStore'
@@ -91,6 +92,55 @@ const routes = [
     meta: { requiresAuth: true }
   },
 
+  // Админ-панель
+  {
+    path: '/admin',
+    component: () => import('../views/admin/AdminLayout.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+    redirect: '/admin/dashboard',
+    children: [
+      {
+        path: 'dashboard',
+        name: 'AdminDashboard',
+        component: () => import('../views/admin/AdminDashboard.vue')
+      },
+      {
+        path: 'users',
+        name: 'UserManagement',
+        component: () => import('../views/admin/UserManagement.vue')
+      },
+      {
+        path: 'content',
+        name: 'ContentManagement',
+        component: () => import('../views/admin/ContentManagement.vue')
+      },
+      {
+        path: 'backups',
+        name: 'BackupManagement',
+        component: () => import('../views/admin/BackupManagement.vue')
+      },
+      {
+        path: 'system',
+        name: 'SystemSettings',
+        component: () => import('../views/admin/SystemSettings.vue')
+      }
+    ]
+  },
+
+  // Предсказания
+  {
+    path: '/predictions',
+    name: 'predictions',
+    component: () => import('../views/PredictionsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/prediction-form',
+    name: 'prediction-form',
+    component: () => import('../views/PredictionForm.vue'),
+    meta: { requiresAuth: true }
+  },
+
   // Обработка 404
   {
     path: '/:pathMatch(.*)*',
@@ -103,13 +153,17 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   const discussionsStore = useDiscussionsStore()
   
-  // Инициализация store если токен есть в localStorage
-  if (!authStore.isAuthenticated && localStorage.getItem('authToken')) {
-    authStore.initialize()
+  // Проверяем аутентификацию только если есть токен
+  if (authStore.token && !authStore.isAuthenticated) {
+    try {
+      await authStore.checkAuth()
+    } catch (error) {
+      console.error('Auth check failed:', error)
+    }
   }
 
   // ОЧИСТКА ТЕКУЩЕГО ОБСУЖДЕНИЯ если уходим со страницы обсуждения
@@ -120,14 +174,22 @@ router.beforeEach((to, from, next) => {
   // Проверка авторизации для защищенных маршрутов
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
+    return
   }
-  // Редирект для гостевых маршрутов если пользователь уже авторизован
-  else if (to.meta.guestOnly && authStore.isAuthenticated) {
+
+  // Проверка прав администратора для админ-панели
+  if (to.meta.requiresAdmin && (!authStore.isAuthenticated || authStore.user?.role !== 'admin')) {
     next('/')
-  } 
-  else {
-    next()
+    return
   }
+
+  // Редирект для гостевых маршрутов если пользователь уже авторизован
+  if (to.meta.guestOnly && authStore.isAuthenticated) {
+    next('/')
+    return
+  }
+
+  next()
 })
 
 export default router

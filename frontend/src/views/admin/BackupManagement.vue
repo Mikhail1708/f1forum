@@ -66,8 +66,9 @@
               🔄 Восстановить
             </button>
             <button 
-              @click="downloadBackup(backup.id)" 
+              @click="downloadBackup(backup.id, backup.filename)" 
               class="btn btn-primary"
+              :disabled="downloading"
             >
               📥 Скачать
             </button>
@@ -107,10 +108,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api from '../../services/api';
+import { useAuthStore } from '../../stores/auth';
 
+const authStore = useAuthStore();
 const backups = ref([]);
 const loading = ref(false);
 const restoring = ref(false);
+const downloading = ref(false);
 const creating = ref(false);
 const showCreateModal = ref(false);
 const newBackupName = ref('');
@@ -121,7 +125,6 @@ const autoBackupSettings = ref({
   keepCount: 10
 });
 
-// Добавьте эту отсутствующую функцию
 const createBackup = () => {
   newBackupName.value = '';
   newBackupNotes.value = '';
@@ -210,14 +213,43 @@ const restoreBackup = async (backupId) => {
   }
 };
 
-const downloadBackup = async (backupId) => {
+const downloadBackup = async (backupId, filename) => {
+  downloading.value = true;
   try {
-    // Создаем временную ссылку для скачивания
-    const downloadUrl = `http://localhost:3000/api/admin/backups/${backupId}/download`;
-    window.open(downloadUrl, '_blank');
+    console.log('Скачивание бэкапа:', backupId);
+    
+    // Получаем токен из store
+    const token = authStore.token;
+    if (!token) {
+      throw new Error('Токен авторизации не найден');
+    }
+
+    // Создаем URL для скачивания с токеном
+    const downloadUrl = `http://localhost:3000/api/admin/backups/${backupId}/download?token=${token}`;
+    
+    // Альтернативный способ через создание временной ссылки
+    const response = await api.get(`/admin/backups/${backupId}/download`, {
+      responseType: 'blob' // Важно для файлов
+    });
+    
+    // Создаем blob и скачиваем
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename || `backup-${backupId}.sql`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    console.log('Бэкап успешно скачан');
+    
   } catch (error) {
     console.error('Ошибка скачивания бэкапа:', error);
-    alert('Ошибка скачивания бэкапа: ' + error.message);
+    alert('Ошибка скачивания бэкапа: ' + (error.response?.data?.error || error.message));
+  } finally {
+    downloading.value = false;
   }
 };
 

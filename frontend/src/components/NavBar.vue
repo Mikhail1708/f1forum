@@ -1,31 +1,30 @@
 <template>
   <nav class="navbar">
-    <div class="nav-brand">
-      <router-link to="/" class="brand-link">🏎️ F1 Forum</router-link>
-    </div>
-    
-    <div class="nav-links">
-      <router-link to="/" class="nav-link">Главная</router-link>
-      <router-link to="/discussions" class="nav-link">💬 Обсуждения</router-link>
-      <router-link to="/drivers" class="nav-link">Пилоты</router-link>
-      <router-link to="/constructors" class="nav-link">Команды</router-link>
-      <router-link to="/circuits" class="nav-link">Трассы</router-link>
-      <router-link to="/races" class="nav-link">Гонки</router-link>
+    <div class="nav-container">
+      <div class="nav-brand">
+        <router-link to="/" class="brand-link">🏎️ F1 Forum</router-link>
+      </div>
       
-      <template v-if="authStore.isAuthenticated">
-        <!-- Добавьте эту строку для админки -->
-        <router-link v-if="isAdmin" to="/admin" class="nav-link admin-link">⚙️ Админка</router-link>
-
-  
-        <router-link to="/profile" class="nav-link">Профиль</router-link>
-        <span class="user-greeting">Привет, {{ authStore.user?.username }}</span>
-        <button @click="handleLogout" class="logout-btn">Выйти</button>
-      </template>
-      
-      <template v-else>
-        <router-link to="/login" class="nav-link">Войти</router-link>
-        <router-link to="/register" class="nav-link register-btn">Регистрация</router-link>
-      </template>
+      <div class="nav-links">
+        <router-link to="/" class="nav-link">Главная</router-link>
+        <router-link to="/discussions" class="nav-link">💬 Обсуждения</router-link>
+        <router-link to="/drivers" class="nav-link">Пилоты</router-link>
+        <router-link to="/constructors" class="nav-link">Команды</router-link>
+        <router-link to="/circuits" class="nav-link">Трассы</router-link>
+        <router-link to="/races" class="nav-link">Гонки</router-link>
+        
+        <template v-if="authStore.isAuthenticated">
+          <router-link v-if="isAdmin" to="/admin" class="nav-link admin-link">⚙️ Админка</router-link>
+          <router-link to="/profile" class="nav-link">Профиль</router-link>
+          <span class="user-greeting">Привет, {{ authStore.user?.username }}</span>
+          <button @click="handleLogout" class="logout-btn">Выйти</button>
+        </template>
+        
+        <template v-else>
+          <router-link to="/login" class="nav-link">Войти</router-link>
+          <router-link to="/register" class="nav-link register-btn">Регистрация</router-link>
+        </template>
+      </div>
     </div>
   </nav>
 </template>
@@ -38,7 +37,6 @@ import { computed } from 'vue';
 const authStore = useAuthStore();
 const router = useRouter();
 
-// Добавляем вычисляемое свойство для проверки роли администратора
 const isAdmin = computed(() => {
   return authStore.user?.role === 'admin';
 });
@@ -51,13 +49,19 @@ const handleLogout = () => {
 
 <style scoped>
 .navbar {
+  background: linear-gradient(135deg, #e10600, #b30500);
+  color: white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  width: 100%; /* ЗАПОЛНЯЕМ ВСЮ ШИРИНУ */
+}
+
+.nav-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background: linear-gradient(135deg, #e10600, #b30500);
-  color: white;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  max-width: 100%; /* УБИРАЕМ ОГРАНИЧЕНИЕ ПО ШИРИНЕ */
+  margin: 0; /* УБИРАЕМ ЦЕНТРИРОВАНИЕ */
 }
 
 .brand-link {
@@ -124,7 +128,7 @@ const handleLogout = () => {
 }
 
 @media (max-width: 768px) {
-  .navbar {
+  .nav-container {
     flex-direction: column;
     gap: 1rem;
   }
