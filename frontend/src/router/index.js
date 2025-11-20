@@ -126,6 +126,37 @@ const routes = [
       }
     ]
   },
+  
+
+// Модераторские роуты
+{
+  path: '/moderator',
+  component: () => import('../views/moderator/ModeratorLayout.vue'),
+  meta: { requiresAuth: true, requiresModerator: true },
+  redirect: '/moderator/dashboard',
+  children: [
+    {
+      path: 'dashboard',
+      name: 'ModeratorDashboard',
+      component: () => import('../views/moderator/ModeratorDashboard.vue')
+    },
+    {
+      path: 'content',
+      name: 'ContentModeration',
+      component: () => import('../views/moderator/ContentModeration.vue')
+    },
+    {
+      path: 'users',
+      name: 'ModeratorUserManagement',
+      component: () => import('../views/moderator/UserManagement.vue')
+    },
+    {
+      path: 'reports',
+      name: 'ReportsManagement',
+      component: () => import('../views/moderator/ReportsManagement.vue')
+    }
+  ]
+},
 
   // Предсказания
   {
@@ -183,6 +214,12 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
+  // Проверка прав на модератора для модер-панели
+if (to.meta.requiresModerator && (!authStore.isAuthenticated || 
+    (authStore.user?.role !== 'moderator' && authStore.user?.role !== 'admin'))) {
+  next('/');
+  return;
+}
   // Редирект для гостевых маршрутов если пользователь уже авторизован
   if (to.meta.guestOnly && authStore.isAuthenticated) {
     next('/')
@@ -191,5 +228,43 @@ router.beforeEach(async (to, from, next) => {
 
   next()
 })
+// frontend/src/router/index.js - обновите навигационные хуки
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore();
+  
+  // Проверяем аутентификацию только если есть токен
+  if (authStore.token && !authStore.isAuthenticated) {
+    try {
+      await authStore.checkAuth();
+    } catch (error) {
+      console.error('Auth check failed:', error);
+    }
+  }
 
+  // Проверка авторизации для защищенных маршрутов
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    next('/login');
+    return;
+  }
+
+  // Проверка прав администратора для админ-панели
+  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    next('/');
+    return;
+  }
+
+  // Проверка прав модератора для модераторской панели
+  if (to.meta.requiresModerator && !authStore.isModerator) {
+    next('/');
+    return;
+  }
+
+  // Редирект для гостевых маршрутов если пользователь уже авторизован
+  if (to.meta.guestOnly && authStore.isAuthenticated) {
+    next('/');
+    return;
+  }
+
+  next();
+});
 export default router

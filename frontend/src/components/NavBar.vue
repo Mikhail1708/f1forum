@@ -12,7 +12,7 @@
         <router-link to="/constructors" class="nav-link">Команды</router-link>
         <router-link to="/circuits" class="nav-link">Трассы</router-link>
         <router-link to="/races" class="nav-link">Гонки</router-link>
-        
+        <router-link v-if="authStore.user?.role === 'moderator' || authStore.user?.role === 'admin'" to="/moderator/dashboard"  class="nav-link moderator-link">🛡️ Модерация</router-link>
         <template v-if="authStore.isAuthenticated">
           <router-link v-if="isAdmin" to="/admin" class="nav-link admin-link">⚙️ Админка</router-link>
           <router-link to="/profile" class="nav-link">Профиль</router-link>

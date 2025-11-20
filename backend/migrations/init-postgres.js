@@ -219,6 +219,44 @@ async function runMigration() {
     throw error;
   }
 }
+// backend/migrations/init-postgres.js - добавьте эту функцию
+async function createModeratorUser() {
+    try {
+        console.log('👮 Creating moderator user...');
+        
+        // Проверяем, существует ли модератор
+        const { rows } = await db.query(
+            "SELECT id FROM users WHERE email = $1",
+            ['moderator@f1forum.com']
+        );
+        
+        if (rows.length > 0) {
+            console.log('✅ Moderator user already exists');
+            return;
+        }
+
+        // Создаем хеш пароля
+        const moderatorPasswordHash = bcrypt.hashSync('moderator123', 10);
+        
+        // Вставляем модератора
+        const { rows: moderatorRows } = await db.query(
+            `INSERT INTO users (username, email, password_hash, role, is_moderator) 
+             VALUES ($1, $2, $3, $4, $5) 
+             RETURNING *`,
+            ['moderator', 'moderator@f1forum.com', moderatorPasswordHash, 'moderator', true]
+        );
+        
+        console.log('✅ Moderator user created successfully');
+        console.log('📧 Login: moderator@f1forum.com');
+        console.log('🔑 Password: moderator123');
+        
+    } catch (error) {
+        console.error('❌ Error creating moderator user:', error);
+        throw error;
+    }
+}
+
+
 
 // Запускаем миграцию
 runMigration()
@@ -230,3 +268,4 @@ runMigration()
     console.error('❌ Migration failed with error:', error.message);
     process.exit(1);
   });
+  await createModeratorUser();

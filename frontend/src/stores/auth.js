@@ -8,6 +8,11 @@ export const useAuthStore = defineStore('auth', {
     token: localStorage.getItem('token'),
     isAuthenticated: false,
   }),
+    getters: {
+    isAdmin: (state) => state.user?.role === 'admin',
+    isModerator: (state) => state.user?.role === 'moderator' || state.user?.role === 'admin',
+    isModeratorOnly: (state) => state.user?.role === 'moderator',
+  },
 
   actions: {
     async login(credentials) {
@@ -64,4 +69,5 @@ export const useAuthStore = defineStore('auth', {
       delete api.defaults.headers.common['Authorization'];
     }
   }
+  
 });

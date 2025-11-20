@@ -32,6 +32,7 @@ app.get('/api/health', (req, res) => {
 
 // Protected routes
 app.use('/api/admin', auth, require('./routes/admin'));
+app.use('/api/moderator', auth, require('./routes/moderator'));
 
 // Error handling
 app.use((err, req, res, next) => {

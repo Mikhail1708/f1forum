@@ -1,7 +1,7 @@
 // backend/routes/admin.js
 const express = require('express');
 const router = express.Router();
-const adminAuth = require('../middleware/adminAuth'); // ИСПРАВЛЕНО: убрали деструктуризацию
+const adminAuth = require('../middleware/adminAuth').adminAuth;
 const adminController = require('../controllers/adminController');
 
 // Статистика системы

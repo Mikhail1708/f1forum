@@ -167,5 +167,31 @@ const authController = {
     }
   }
 };
+// Создание тестового модератора (для разработки)
+const createTestModerator = async () => {
+    try {
+        const { rows } = await db.query(
+            'SELECT id FROM users WHERE email = $1',
+            ['moderator@f1forum.com']
+        );
+
+        if (rows.length === 0) {
+            const password_hash = await bcrypt.hash('moderator123', 10);
+            await db.query(
+                `INSERT INTO users (username, email, password_hash, role, is_moderator) 
+                 VALUES ($1, $2, $3, $4, $5)`,
+                ['moderator', 'moderator@f1forum.com', password_hash, 'moderator', true]
+            );
+            console.log('✅ Test moderator created');
+            console.log('📧 Login: moderator@f1forum.com');
+            console.log('🔑 Password: moderator123');
+        }
+    } catch (error) {
+        console.error('❌ Error creating test moderator:', error);
+    }
+};
+
+// Вызовите эту функцию при запуске приложения
+createTestModerator();
 
 module.exports = authController;
