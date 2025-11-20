@@ -4,6 +4,17 @@ const router = express.Router();
 const topicController = require('../controllers/topicController');
 const auth = require('../middleware/auth');
 
+// Отладочный middleware для логирования запросов
+router.use((req, res, next) => {
+  console.log(`📨 TOPICS ${req.method} ${req.path}`, {
+    params: req.params,
+    query: req.query,
+    body: req.body,
+    userId: req.userId
+  });
+  next();
+});
+
 // Публичные маршруты
 router.get('/', topicController.getTopics);
 router.get('/:id', topicController.getTopicById);
@@ -12,6 +23,9 @@ router.get('/:id', topicController.getTopicById);
 router.post('/', auth, topicController.createTopic);
 router.put('/:id', auth, topicController.updateTopic);
 router.delete('/:id', auth, topicController.deleteTopic);
+
+// Действия с топиками
 router.patch('/:id/views', topicController.incrementViews);
+router.post('/:id/like', auth, topicController.likeTopic);
 
 module.exports = router;

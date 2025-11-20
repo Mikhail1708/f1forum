@@ -1,608 +1,478 @@
+<!-- frontend/src/views/DiscussionView.vue -->
 <template>
-  <div class="discussion-view">
-    <div v-if="discussionsStore.loading" class="loading">Загрузка обсуждения...</div>
-    
-    <div v-else-if="discussionsStore.currentDiscussion" class="discussion-content">
-      <button @click="$router.push('/discussions')" class="back-btn">← Назад</button>
-      
-      <article class="discussion-main">
-        <header class="discussion-header">
-          <!-- Режим редактирования обсуждения -->
-          <div v-if="editingDiscussion" class="edit-form">
-            <input v-model="editDiscussionData.title" class="edit-title" placeholder="Заголовок">
-            <textarea v-model="editDiscussionData.content" class="edit-content" placeholder="Содержание"></textarea>
-            <input v-model="editDiscussionData.tagsInput" class="edit-tags" placeholder="Теги через запятую">
-            <div class="edit-actions">
-              <button @click="saveDiscussion" class="save-btn" :disabled="saving">💾 Сохранить</button>
-              <button @click="cancelEditDiscussion" class="cancel-btn">❌ Отмена</button>
-            </div>
-          </div>
-          
-          <!-- Режим просмотра обсуждения -->
-          <div v-else>
-            <div class="discussion-header-actions">
-              <h1>{{ discussionsStore.currentDiscussion.title }}</h1>
-              <div v-if="canEditDiscussion" class="discussion-actions-menu">
-                <button @click="startEditDiscussion" class="edit-btn">✏️</button>
-                <button @click="deleteDiscussion" class="delete-btn">🗑️ УДАЛИТЬ</button>
-              </div>
-            </div>
-            
-            <div class="discussion-meta">
-              <span class="author">👤 {{ discussionsStore.currentDiscussion.author?.username || 'Unknown' }}</span>
-              <span class="date">{{ formatDate(discussionsStore.currentDiscussion.created_at) }}</span>
-              <span class="views">👁️ {{ discussionsStore.currentDiscussion.views }}</span>
-            </div>
-            
-            <div class="tags">
-              <span v-for="tag in discussionsStore.currentDiscussion.tags" :key="tag" class="tag">#{{ tag }}</span>
-            </div>
-          </div>
-        </header>
-        
-        <div class="discussion-body" v-if="!editingDiscussion">
-          <p>{{ discussionsStore.currentDiscussion.content }}</p>
-        </div>
-        
-        <div class="discussion-actions" v-if="!editingDiscussion">
-          <button @click="likeDiscussion" class="like-btn" :disabled="liking">
-            👍 {{ discussionsStore.currentDiscussion.likes || 0 }}
+  <div class="discussion-view" v-if="discussionStore.currentDiscussion">
+    <div class="discussion-header">
+      <h1>{{ discussionStore.currentDiscussion.title }}</h1>
+      <div class="discussion-meta">
+        <span class="author">👤 {{ discussionStore.currentDiscussion.author?.username }}</span>
+        <span class="date">{{ formatDate(discussionStore.currentDiscussion.created_at) }}</span>
+        <div class="discussion-stats">
+          <span class="views">👁️ {{ discussionStore.currentDiscussion.views }}</span>
+          <span class="likes">👍 {{ discussionStore.currentDiscussion.likes }}</span>
+          <button 
+            @click="likeDiscussion(discussionStore.currentDiscussion.id)" 
+            class="like-btn"
+            :class="{ 'liked': discussionStore.currentDiscussion.liked }"
+          >
+            ❤️
           </button>
         </div>
-      </article>
+      </div>
+    </div>
 
-      <section class="comments-section">
-        <h2>💬 Комментарии ({{ getTotalComments() }})</h2>
-        
-        <!-- Форма комментария -->
-        <div v-if="authStore.isAuthenticated" class="comment-form">
-          <h3>{{ replyingTo ? `Ответ ${replyingTo.author?.username}` : 'Добавить комментарий' }}</h3>
-          <form @submit.prevent="submitComment">
-            <textarea v-model="newComment" placeholder="Введите комментарий..." rows="4" required></textarea>
-            <div class="form-actions">
-              <button type="submit" :disabled="!newComment.trim() || submitting" class="submit-btn">
-                {{ submitting ? 'Отправка...' : (replyingTo ? 'Ответить' : 'Отправить') }}
+    <div class="discussion-content">
+      <p>{{ discussionStore.currentDiscussion.content }}</p>
+      <div class="tags" v-if="discussionStore.currentDiscussion.tags && discussionStore.currentDiscussion.tags.length">
+        <span v-for="tag in discussionStore.currentDiscussion.tags" :key="tag" class="tag">#{{ tag }}</span>
+      </div>
+    </div>
+
+    <!-- Действия с обсуждением -->
+    <div class="discussion-actions" v-if="authStore.isAuthenticated">
+      <button 
+        v-if="isDiscussionAuthor(discussionStore.currentDiscussion)"
+        @click="editDiscussion" 
+        class="edit-btn"
+      >
+        ✏️ Редактировать
+      </button>
+      <button 
+        v-if="isDiscussionAuthor(discussionStore.currentDiscussion)"
+        @click="deleteDiscussion" 
+        class="delete-btn"
+      >
+        🗑️ Удалить
+      </button>
+    </div>
+
+    <!-- Комментарии -->
+    <div class="comments-section">
+      <h3>Комментарии ({{ getTotalCommentsCount() }})</h3>
+      
+      <!-- Форма добавления комментария -->
+      <div v-if="authStore.isAuthenticated" class="comment-form">
+        <textarea 
+          v-model="newComment" 
+          placeholder="Напишите ваш комментарий..."
+          rows="4"
+        ></textarea>
+        <button @click="addComment" class="submit-btn" :disabled="!newComment.trim()">
+          💬 Добавить комментарий
+        </button>
+      </div>
+      <div v-else class="login-prompt">
+        <router-link to="/login" class="login-link">
+          🔑 Войдите, чтобы оставить комментарий
+        </router-link>
+      </div>
+
+      <!-- Список комментариев -->
+      <div v-if="discussionStore.currentDiscussion.comments && discussionStore.currentDiscussion.comments.length" class="comments-list">
+        <div 
+          v-for="comment in discussionStore.currentDiscussion.comments" 
+          :key="comment.id"
+          class="comment"
+        >
+          <!-- Основной комментарий -->
+          <div class="comment-main">
+            <div class="comment-header">
+              <span class="comment-author">{{ comment.author?.username }}</span>
+              <span class="comment-date">{{ formatDate(comment.created_at) }}</span>
+            </div>
+            <div class="comment-content">{{ comment.content }}</div>
+            <div class="comment-actions">
+              <button @click="likeComment(comment.id)" class="like-btn">
+                👍 {{ comment.likes || 0 }}
               </button>
-              <button v-if="replyingTo" type="button" @click="cancelReply" class="cancel-btn">Отмена</button>
+              <button @click="toggleReply(comment.id)" class="reply-btn">
+                💬 Ответить
+              </button>
+              <button 
+                v-if="isCommentAuthor(comment)"
+                @click="editComment(comment)"
+                class="edit-btn"
+              >
+                ✏️
+              </button>
+              <button 
+                v-if="isCommentAuthor(comment)"
+                @click="deleteComment(comment.id)"
+                class="delete-btn"
+              >
+                🗑️
+              </button>
             </div>
-          </form>
-        </div>
-        <div v-else class="auth-required">
-          <p>🔑 <router-link to="/login">Войдите</router-link>, чтобы оставить комментарий</p>
-        </div>
 
-        <!-- Список комментариев -->
-        <div class="comments-list">
-          <div v-for="comment in discussionsStore.currentDiscussion.comments || []" :key="comment.id" class="comment">
-            <!-- Режим редактирования комментария -->
-            <div v-if="editingComment === comment.id" class="edit-comment-form">
-              <textarea v-model="editCommentData.content" class="edit-comment-text" placeholder="Текст комментария"></textarea>
-              <div class="edit-comment-actions">
-                <button @click="saveComment(comment.id)" class="save-btn" :disabled="savingComment">💾 Сохранить</button>
-                <button @click="cancelEditComment" class="cancel-btn">❌ Отмена</button>
-              </div>
-            </div>
-            
-            <!-- Режим просмотра комментария -->
-            <div v-else>
-              <div class="comment-header">
-                <span class="comment-author">👤 {{ comment.author?.username || 'Unknown' }}</span>
-                <span class="comment-date">{{ formatDate(comment.created_at) }}</span>
-                <div v-if="canEditComment(comment)" class="comment-actions">
-                  <button @click="startEditComment(comment)" class="edit-btn">✏️</button>
-                  <button @click="deleteComment(comment.id)" class="delete-btn">🗑️ УДАЛИТЬ</button>
-                </div>
-              </div>
-              
-              <div class="comment-body">
-                <p>{{ comment.content }}</p>
-              </div>
-              
-              <div class="comment-footer">
-                <button @click="likeComment(comment.id)" class="like-btn" :disabled="likingComment === comment.id">
-                  👍 {{ comment.likes || 0 }}
+            <!-- Форма ответа -->
+            <div v-if="replyingTo === comment.id" class="reply-form">
+              <textarea 
+                v-model="replyContent" 
+                placeholder="Введите ваш ответ..."
+                rows="3"
+              ></textarea>
+              <div class="reply-actions">
+                <button @click="submitReply(comment.id)" class="submit-btn">
+                  Отправить
                 </button>
-                <button @click="startReply(comment)" class="reply-btn">💬 Ответить</button>
+                <button @click="cancelReply" class="cancel-btn">
+                  Отмена
+                </button>
               </div>
             </div>
+          </div>
 
-            <!-- Ответы -->
-            <div v-if="comment.replies && comment.replies.length" class="replies">
-              <div v-for="reply in comment.replies" :key="reply.id" class="comment reply">
-                <!-- Режим редактирования ответа -->
-                <div v-if="editingComment === reply.id" class="edit-comment-form">
-                  <textarea v-model="editCommentData.content" class="edit-comment-text" placeholder="Текст ответа"></textarea>
-                  <div class="edit-comment-actions">
-                    <button @click="saveComment(reply.id)" class="save-btn" :disabled="savingComment">💾 Сохранить</button>
-                    <button @click="cancelEditComment" class="cancel-btn">❌ Отмена</button>
-                  </div>
+          <!-- Вложенные ответы -->
+          <div v-if="comment.replies && comment.replies.length > 0" class="replies">
+            <div 
+              v-for="reply in comment.replies" 
+              :key="reply.id"
+              class="comment reply"
+            >
+              <div class="comment-main">
+                <div class="comment-header">
+                  <span class="comment-author">{{ reply.author?.username }}</span>
+                  <span class="comment-date">{{ formatDate(reply.created_at) }}</span>
                 </div>
-                
-                <!-- Режим просмотра ответа -->
-                <div v-else>
-                  <div class="comment-header">
-                    <span class="comment-author">👤 {{ reply.author?.username || 'Unknown' }}</span>
-                    <span class="comment-date">{{ formatDate(reply.created_at) }}</span>
-                    <div v-if="canEditComment(reply)" class="comment-actions">
-                      <button @click="startEditComment(reply)" class="edit-btn">✏️</button>
-                      <button @click="deleteComment(reply.id)" class="delete-btn">🗑️ УДАЛИТЬ</button>
-                    </div>
-                  </div>
-                  
-                  <div class="comment-body">
-                    <p>{{ reply.content }}</p>
-                  </div>
-                  
-                  <div class="comment-footer">
-                    <button @click="likeComment(reply.id)" class="like-btn" :disabled="likingComment === reply.id">
-                      👍 {{ reply.likes || 0 }}
-                    </button>
-                  </div>
+                <div class="comment-content">{{ reply.content }}</div>
+                <div class="comment-actions">
+                  <button @click="likeComment(reply.id)" class="like-btn">
+                    👍 {{ reply.likes || 0 }}
+                  </button>
+                  <button 
+                    v-if="isCommentAuthor(reply)"
+                    @click="editComment(reply)"
+                    class="edit-btn"
+                  >
+                    ✏️
+                  </button>
+                  <button 
+                    v-if="isCommentAuthor(reply)"
+                    @click="deleteComment(reply.id)"
+                    class="delete-btn"
+                  >
+                    🗑️
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </section>
+      </div>
+      
+      <div v-else class="no-comments">
+        <p>Пока нет комментариев. Будьте первым!</p>
+      </div>
     </div>
-    
-    <div v-else class="error">
-      Обсуждение не найдено
+
+    <!-- Загрузка -->
+    <div v-if="discussionStore.loading" class="loading">
+      Загрузка...
     </div>
+  </div>
+
+  <div v-else-if="discussionStore.loading" class="loading">
+    Загрузка обсуждения...
+  </div>
+
+  <div v-else class="error">
+    Обсуждение не найдено
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDiscussionsStore } from '../stores/discussionsStore';
 import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
-const discussionsStore = useDiscussionsStore();
+const discussionStore = useDiscussionsStore();
 const authStore = useAuthStore();
 
 const newComment = ref('');
 const replyingTo = ref(null);
-const submitting = ref(false);
-const liking = ref(false);
-const likingComment = ref(null);
-
-// Редактирование обсуждения
-const editingDiscussion = ref(false);
-const editDiscussionData = ref({
-  title: '',
-  content: '',
-  tagsInput: ''
-});
-const saving = ref(false);
-
-// Редактирование комментариев
+const replyContent = ref('');
 const editingComment = ref(null);
-const editCommentData = ref({
-  content: ''
-});
-const savingComment = ref(false);
+const editContent = ref('');
 
-onMounted(() => {
-  const discussionId = route.params.id;
-  if (discussionId) {
-    discussionsStore.fetchDiscussion(discussionId);
-  }
+onMounted(async () => {
+  await discussionStore.fetchDiscussion(route.params.id);
 });
 
-// Проверка прав на редактирование обсуждения
-const canEditDiscussion = computed(() => {
-  return discussionsStore.isCurrentUserAuthor(discussionsStore.currentDiscussion);
+onUnmounted(() => {
+  discussionStore.clearCurrentDiscussion();
 });
-
-// Проверка прав на редактирование комментария
-const canEditComment = (comment) => {
-  return discussionsStore.isCurrentUserAuthor(comment);
-};
 
 const formatDate = (dateString) => {
-  if (!dateString) return '';
   try {
     return new Date(dateString).toLocaleDateString('ru-RU', {
       day: 'numeric',
-      month: 'long',
+      month: 'short',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
   } catch {
-    return '';
+    return 'неизвестно';
   }
 };
 
-const getTotalComments = () => {
-  const discussion = discussionsStore.currentDiscussion;
-  if (!discussion?.comments) return 0;
+const isDiscussionAuthor = (discussion) => {
+  return discussionStore.isCurrentUserAuthor(discussion);
+};
+
+const isCommentAuthor = (comment) => {
+  return discussionStore.isCurrentUserAuthor(comment);
+};
+
+const getTotalCommentsCount = () => {
+  if (!discussionStore.currentDiscussion?.comments) return 0;
   
-  let total = discussion.comments.length;
-  discussion.comments.forEach(comment => {
+  let count = 0;
+  discussionStore.currentDiscussion.comments.forEach(comment => {
+    count++; // основной комментарий
     if (comment.replies) {
-      total += comment.replies.length;
+      count += comment.replies.length; // ответы
     }
   });
-  return total;
+  return count;
 };
 
-// Редактирование обсуждения
-const startEditDiscussion = () => {
-  editingDiscussion.value = true;
-  editDiscussionData.value = {
-    title: discussionsStore.currentDiscussion.title,
-    content: discussionsStore.currentDiscussion.content,
-    tagsInput: discussionsStore.currentDiscussion.tags?.join(', ') || ''
-  };
-};
-
-const cancelEditDiscussion = () => {
-  editingDiscussion.value = false;
-  editDiscussionData.value = { title: '', content: '', tagsInput: '' };
-};
-
-const saveDiscussion = async () => {
-  if (!editDiscussionData.value.title.trim() || !editDiscussionData.value.content.trim()) {
-    alert('Заполните все поля');
-    return;
-  }
-
-  saving.value = true;
+const likeDiscussion = async (discussionId) => {
   try {
-    const discussionData = {
-      title: editDiscussionData.value.title.trim(),
-      content: editDiscussionData.value.content.trim(),
-      tags: editDiscussionData.value.tagsInput
-        ? editDiscussionData.value.tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag)
-        : []
-    };
-
-    await discussionsStore.updateDiscussion(discussionsStore.currentDiscussion.id, discussionData);
-    editingDiscussion.value = false;
+    await discussionStore.likeDiscussion(discussionId);
   } catch (error) {
-    alert('Ошибка: ' + (error.response?.data?.error || error.message));
-  } finally {
-    saving.value = false;
+    console.error('Ошибка при лайке:', error);
   }
 };
 
-// УДАЛЕНИЕ ОБСУЖДЕНИЯ - БЕЗ CONFIRM
-const deleteDiscussion = async () => {
-  console.log('🗑️ deleteDiscussion вызвана');
-
+const addComment = async () => {
+  if (!newComment.value.trim()) return;
+  
   try {
-    console.log('🗑️ Deleting discussion from component...');
-    await discussionsStore.deleteDiscussion(discussionsStore.currentDiscussion.id);
-    console.log('✅ Discussion deleted successfully');
-    router.push('/discussions');
-  } catch (error) {
-    console.error('❌ Delete discussion error in component:', error);
-    alert('Ошибка при удалении: ' + (error.response?.data?.error || error.message));
-  }
-};
-
-// Редактирование комментариев
-const startEditComment = (comment) => {
-  editingComment.value = comment.id;
-  editCommentData.value = {
-    content: comment.content
-  };
-};
-
-const cancelEditComment = () => {
-  editingComment.value = null;
-  editCommentData.value = { content: '' };
-};
-
-const saveComment = async (commentId) => {
-  if (!editCommentData.value.content.trim()) {
-    alert('Введите текст комментария');
-    return;
-  }
-
-  savingComment.value = true;
-  try {
-    await discussionsStore.updateComment(commentId, {
-      content: editCommentData.value.content.trim()
+    await discussionStore.addComment(route.params.id, {
+      content: newComment.value.trim()
     });
-    editingComment.value = null;
-    editCommentData.value = { content: '' };
+    newComment.value = '';
   } catch (error) {
-    alert('Ошибка: ' + (error.response?.data?.error || error.message));
-  } finally {
-    savingComment.value = false;
+    console.error('Ошибка при добавлении комментария:', error);
   }
 };
 
-// УДАЛЕНИЕ КОММЕНТАРИЯ - БЕЗ CONFIRM
-const deleteComment = async (commentId) => {
-  console.log('🗑️ deleteComment вызвана для комментария:', commentId);
-
-  try {
-    console.log('🗑️ Deleting comment from component:', commentId);
-    await discussionsStore.deleteComment(commentId);
-    console.log('✅ Comment deleted successfully');
-  } catch (error) {
-    console.error('❌ Delete comment error in component:', error);
-    alert('Ошибка при удалении: ' + (error.response?.data?.error || error.message));
-  }
-};
-
-const startReply = (comment) => {
-  replyingTo.value = comment;
+const toggleReply = (commentId) => {
+  replyingTo.value = replyingTo.value === commentId ? null : commentId;
+  replyContent.value = '';
 };
 
 const cancelReply = () => {
   replyingTo.value = null;
+  replyContent.value = '';
 };
 
-const submitComment = async () => {
-  if (!newComment.value.trim() || submitting.value) return;
-
-  submitting.value = true;
-  try {
-    if (replyingTo.value) {
-      await discussionsStore.addReply(replyingTo.value.id, { content: newComment.value });
-    } else {
-      await discussionsStore.addComment(discussionsStore.currentDiscussion.id, { content: newComment.value });
-    }
-    
-    newComment.value = '';
-    replyingTo.value = null;
-  } catch (error) {
-    alert('Ошибка: ' + (error.response?.data?.error || error.message));
-  } finally {
-    submitting.value = false;
-  }
-};
-
-const likeDiscussion = async () => {
-  if (liking.value) return;
+const submitReply = async (commentId) => {
+  if (!replyContent.value.trim()) return;
   
-  liking.value = true;
   try {
-    await discussionsStore.likeDiscussion(discussionsStore.currentDiscussion.id);
+    await discussionStore.addReply(commentId, {
+      content: replyContent.value.trim()
+    });
+    cancelReply();
   } catch (error) {
-    alert('Ошибка: ' + (error.response?.data?.error || error.message));
-  } finally {
-    liking.value = false;
+    console.error('Ошибка при отправке ответа:', error);
   }
 };
 
 const likeComment = async (commentId) => {
-  if (likingComment.value === commentId) return;
-  
-  likingComment.value = commentId;
   try {
-    await discussionsStore.likeComment(commentId);
+    await discussionStore.likeComment(commentId);
   } catch (error) {
-    alert('Ошибка: ' + (error.response?.data?.error || error.message));
-  } finally {
-    setTimeout(() => {
-      likingComment.value = null;
-    }, 500);
+    console.error('Ошибка при лайке комментария:', error);
+  }
+};
+
+const editComment = (comment) => {
+  editingComment.value = comment;
+  editContent.value = comment.content;
+};
+
+const updateComment = async () => {
+  if (!editContent.value.trim()) return;
+  
+  try {
+    await discussionStore.updateComment(editingComment.value.id, {
+      content: editContent.value.trim()
+    });
+    editingComment.value = null;
+    editContent.value = '';
+  } catch (error) {
+    console.error('Ошибка при редактировании комментария:', error);
+  }
+};
+
+const cancelEdit = () => {
+  editingComment.value = null;
+  editContent.value = '';
+};
+
+const deleteComment = async (commentId) => {
+  if (!confirm('Вы уверены, что хотите удалить этот комментарий?')) return;
+  
+  try {
+    await discussionStore.deleteComment(commentId);
+  } catch (error) {
+    console.error('Ошибка при удалении комментария:', error);
+  }
+};
+
+const editDiscussion = () => {
+  // Реализация редактирования обсуждения
+  console.log('Редактирование обсуждения');
+};
+
+const deleteDiscussion = async () => {
+  if (!confirm('Вы уверены, что хотите удалить это обсуждение?')) return;
+  
+  try {
+    await discussionStore.deleteDiscussion(route.params.id);
+    router.push('/discussions');
+  } catch (error) {
+    console.error('Ошибка при удалении обсуждения:', error);
   }
 };
 </script>
 
 <style scoped>
-/* Стили остаются такими же как в предыдущем коде */
 .discussion-view {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
 }
 
-.back-btn {
-  background: #666;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
+.discussion-header {
   margin-bottom: 2rem;
-}
-
-.discussion-main {
-  background: white;
-  border-radius: 10px;
-  padding: 2rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  margin-bottom: 2rem;
-}
-
-.discussion-header-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e10600;
 }
 
 .discussion-header h1 {
-  margin: 0;
+  margin: 0 0 1rem 0;
   color: #333;
-  font-size: 1.75rem;
-  flex: 1;
-}
-
-.discussion-actions-menu {
-  display: flex;
-  gap: 0.5rem;
-  margin-left: 1rem;
-}
-
-.edit-btn, .delete-btn {
-  background: transparent;
-  border: 1px solid #e0e0e0;
-  padding: 6px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.2s;
-}
-
-.edit-btn:hover {
-  background: #e3f2fd;
-  border-color: #2196f3;
-}
-
-.delete-btn:hover {
-  background: #ffebee;
-  border-color: #f44336;
-  transform: scale(1.1);
+  font-size: 2rem;
 }
 
 .discussion-meta {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
-  margin-bottom: 1rem;
   color: #666;
   font-size: 0.9rem;
 }
 
-.tags {
+.discussion-stats {
   display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.tag {
-  background: #e10600;
-  color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-}
-
-.discussion-body {
-  line-height: 1.6;
-  color: #333;
-  font-size: 1.1rem;
-  margin-bottom: 1.5rem;
-}
-
-.discussion-actions {
-  display: flex;
+  align-items: center;
   gap: 1rem;
 }
 
 .like-btn {
   background: transparent;
-  border: 1px solid #e0e0e0;
-  padding: 8px 16px;
+  border: 1px solid #e10600;
+  color: #e10600;
+  padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.3s;
 }
 
-.like-btn:hover:not(:disabled) {
+.like-btn:hover, .like-btn.liked {
+  background: #e10600;
+  color: white;
+}
+
+.discussion-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.tags {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.tag {
   background: #f0f0f0;
+  color: #666;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
 }
 
-.like-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Формы редактирования */
-.edit-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.edit-title {
-  font-size: 1.5rem;
-  font-weight: bold;
-  padding: 0.5rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
-}
-
-.edit-content {
-  min-height: 120px;
-  padding: 1rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
-  resize: vertical;
-  font-family: inherit;
-}
-
-.edit-tags {
-  padding: 0.5rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
-}
-
-.edit-actions {
+.discussion-actions {
   display: flex;
   gap: 1rem;
+  margin-bottom: 2rem;
 }
 
-.save-btn {
-  background: #4caf50;
-  color: white;
+.edit-btn, .delete-btn {
+  padding: 0.5rem 1rem;
   border: none;
-  padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
+  font-size: 0.9rem;
 }
 
-.save-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.cancel-btn {
-  background: #666;
+.edit-btn {
+  background: #007bff;
   color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
 }
 
-/* Комментарии */
+.delete-btn {
+  background: #dc3545;
+  color: white;
+}
+
 .comments-section {
   background: white;
-  border-radius: 10px;
   padding: 2rem;
+  border-radius: 10px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
-.comment-form {
+.comment-form, .login-prompt {
   margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: #f8f9fa;
+  padding: 1rem;
+  border: 1px solid #e0e0e0;
   border-radius: 8px;
 }
 
 .comment-form textarea {
   width: 100%;
-  padding: 12px;
-  border: 2px solid #e0e0e0;
+  padding: 1rem;
+  border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 16px;
-  margin-bottom: 1rem;
   resize: vertical;
-}
-
-.form-actions {
-  display: flex;
-  gap: 1rem;
+  font-family: inherit;
+  font-size: 1rem;
 }
 
 .submit-btn {
   background: #e10600;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 0.75rem 1.5rem;
   border-radius: 6px;
   cursor: pointer;
+  margin-top: 1rem;
+  font-size: 1rem;
 }
 
 .submit-btn:disabled {
@@ -610,33 +480,54 @@ const likeComment = async (commentId) => {
   cursor: not-allowed;
 }
 
-.auth-required {
-  text-align: center;
-  padding: 1rem;
-  background: #fff3cd;
-  border-radius: 6px;
-  margin-bottom: 2rem;
+.login-link {
+  color: #e10600;
+  text-decoration: none;
+  font-weight: 500;
 }
 
-.comments-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
+/* Стили для комментариев */
 .comment {
+  margin-bottom: 1rem;
+  padding: 1rem;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
-  padding: 1.5rem;
-  background: #fafafa;
+  background: white;
+}
+
+.comment.reply {
+  margin-left: 2rem;
+  margin-top: 0.5rem;
+  border-left: 3px solid #e10600;
+  background: #f9f9f9;
+}
+
+.replies {
+  margin-top: 1rem;
+  border-left: 2px solid #ddd;
+  padding-left: 1rem;
 }
 
 .comment-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
+}
+
+.comment-author {
+  font-weight: bold;
+  color: #e10600;
+}
+
+.comment-date {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.comment-content {
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
 }
 
 .comment-actions {
@@ -644,57 +535,82 @@ const likeComment = async (commentId) => {
   gap: 0.5rem;
 }
 
-.comment-body {
-  margin-bottom: 1rem;
-  line-height: 1.5;
-}
-
-.comment-footer {
-  display: flex;
-  gap: 1rem;
-}
-
-.reply-btn {
-  background: transparent;
-  border: 1px solid #e0e0e0;
-  padding: 4px 12px;
+.comment-actions button {
+  background: none;
+  border: 1px solid #ddd;
+  padding: 0.25rem 0.5rem;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.8rem;
 }
 
-.reply {
-  margin-left: 2rem;
-  background: #f8f9fa;
+.comment-actions .like-btn:hover,
+.comment-actions .reply-btn:hover {
+  background: #f0f0f0;
 }
 
-/* Форма редактирования комментария */
-.edit-comment-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+.comment-actions .edit-btn {
+  color: #007bff;
+  border-color: #007bff;
 }
 
-.edit-comment-text {
-  min-height: 80px;
+.comment-actions .delete-btn {
+  color: #dc3545;
+  border-color: #dc3545;
+}
+
+.reply-form {
+  margin-top: 1rem;
   padding: 1rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 6px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.reply-form textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
   resize: vertical;
-  font-family: inherit;
 }
 
-.edit-comment-actions {
+.reply-actions {
+  margin-top: 0.5rem;
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
-.loading, .error {
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.loading, .error, .no-comments {
   text-align: center;
   padding: 3rem;
+  color: #666;
 }
 
-.error {
-  color: #e10600;
+@media (max-width: 768px) {
+  .discussion-view {
+    padding: 10px;
+  }
+  
+  .discussion-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .comment.reply {
+    margin-left: 1rem;
+  }
+  
+  .comment-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>

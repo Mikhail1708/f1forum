@@ -1,3 +1,4 @@
+// backend/models/Topic.js
 const db = require('../db/postgres');
 
 class Topic {
@@ -5,8 +6,8 @@ class Topic {
     const { title, content, user_id, tags = [] } = topicData;
     
     const { rows } = await db.query(
-      `INSERT INTO topics (title, content, user_id, tags) 
-       VALUES ($1, $2, $3, $4) 
+      `INSERT INTO topics (title, content, user_id, tags, status) 
+       VALUES ($1, $2, $3, $4, 'pending') 
        RETURNING *`,
       [title, content, user_id, JSON.stringify(tags)]
     );
@@ -20,6 +21,7 @@ class Topic {
              (SELECT COUNT(*) FROM comments WHERE topic_id = t.id) as comments_count
       FROM topics t
       LEFT JOIN users u ON t.user_id = u.id
+      WHERE t.status = 'approved'
       ORDER BY t.created_at DESC
     `);
     
@@ -32,7 +34,6 @@ class Topic {
   }
 
   static async findById(id) {
-    // Проверяем валидность ID
     const topicId = parseInt(id);
     if (isNaN(topicId) || topicId <= 0) {
       console.error('Invalid topic ID:', id);
@@ -44,7 +45,7 @@ class Topic {
              (SELECT COUNT(*) FROM comments WHERE topic_id = t.id) as comments_count
       FROM topics t
       LEFT JOIN users u ON t.user_id = u.id
-      WHERE t.id = $1
+      WHERE t.id = $1 AND t.status = 'approved'
     `, [topicId]);
     
     if (rows.length === 0) return null;
@@ -60,7 +61,6 @@ class Topic {
   }
 
   static async incrementViews(id) {
-    // Проверяем валидность ID
     const topicId = parseInt(id);
     if (isNaN(topicId) || topicId <= 0) {
       console.error('Invalid topic ID for incrementViews:', id);
@@ -68,13 +68,12 @@ class Topic {
     }
 
     await db.query(
-      'UPDATE topics SET views = COALESCE(views, 0) + 1 WHERE id = $1',
-      [topicId]
+      'UPDATE topics SET views = COALESCE(views, 0) + 1 WHERE id = $1 AND status = $2',
+      [topicId, 'approved']
     );
   }
 
   static async likeTopic(id, userId) {
-    // Проверяем валидность ID
     const topicId = parseInt(id);
     const user_Id = parseInt(userId);
     
@@ -86,31 +85,28 @@ class Topic {
     }
 
     try {
-      // Проверяем существующий лайк
       const { rows: existingLike } = await db.query(
         'SELECT * FROM topic_likes WHERE topic_id = $1 AND user_id = $2',
         [topicId, user_Id]
       );
       
       if (existingLike.length > 0) {
-        // Удаляем лайк
         await db.query(
           'DELETE FROM topic_likes WHERE topic_id = $1 AND user_id = $2',
           [topicId, user_Id]
         );
         await db.query(
-          'UPDATE topics SET likes = GREATEST(COALESCE(likes, 0) - 1, 0) WHERE id = $1',
+          'UPDATE topics SET likes = GREATEST(COALESCE(likes, 0) - 1, 0) WHERE id = $1', // ИСПРАВЛЕНО: likes
           [topicId]
         );
         return { liked: false, action: 'removed' };
       } else {
-        // Добавляем лайк
         await db.query(
           'INSERT INTO topic_likes (topic_id, user_id) VALUES ($1, $2)',
           [topicId, user_Id]
         );
         await db.query(
-          'UPDATE topics SET likes = COALESCE(likes, 0) + 1 WHERE id = $1',
+          'UPDATE topics SET likes = COALESCE(likes, 0) + 1 WHERE id = $1', // ИСПРАВЛЕНО: likes
           [topicId]
         );
         return { liked: true, action: 'added' };
@@ -122,7 +118,6 @@ class Topic {
   }
 
   static async getLikesCount(id) {
-    // Проверяем валидность ID
     const topicId = parseInt(id);
     if (isNaN(topicId) || topicId <= 0) {
       console.error('Invalid topic ID for getLikesCount:', id);
@@ -136,11 +131,9 @@ class Topic {
     return parseInt(rows[0].count);
   }
 
-  // Обновление топика
   static async update(id, updateData) {
     const { title, content, tags = [] } = updateData;
     
-    // Проверяем валидность ID
     const topicId = parseInt(id);
     if (isNaN(topicId) || topicId <= 0) {
       throw new Error('Invalid topic ID');
@@ -148,7 +141,7 @@ class Topic {
 
     const { rows } = await db.query(
       `UPDATE topics 
-       SET title = $1, content = $2, tags = $3, updated_at = CURRENT_TIMESTAMP 
+       SET title = $1, content = $2, tags = $3, updated_at = CURRENT_TIMESTAMP, status = 'pending'
        WHERE id = $4 
        RETURNING *`,
       [title, content, JSON.stringify(tags), topicId]
@@ -164,36 +157,23 @@ class Topic {
     return updatedTopic;
   }
 
-  // Удаление топика
   static async delete(id) {
-    // Проверяем валидность ID
     const topicId = parseInt(id);
     if (isNaN(topicId) || topicId <= 0) {
       throw new Error('Invalid topic ID');
     }
 
     try {
-      // Начинаем транзакцию
       await db.query('BEGIN');
-
-      // Удаляем лайки топика
       await db.query('DELETE FROM topic_likes WHERE topic_id = $1', [topicId]);
-      
-      // Удаляем комментарии топика
       await db.query('DELETE FROM comments WHERE topic_id = $1', [topicId]);
-      
-      // Удаляем сам топик
       const { rows } = await db.query(
         'DELETE FROM topics WHERE id = $1 RETURNING *',
         [topicId]
       );
-
-      // Коммитим транзакцию
       await db.query('COMMIT');
-      
       return rows[0];
     } catch (error) {
-      // Откатываем транзакцию при ошибке
       await db.query('ROLLBACK');
       throw error;
     }

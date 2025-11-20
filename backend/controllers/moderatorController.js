@@ -14,28 +14,16 @@ const moderatorController = {
                 warnedUsers
             ] = await Promise.all([
                 // Темы на модерации
-                db.query(`
-                    SELECT COUNT(*) as count FROM topics 
-                    WHERE status = 'pending' OR status IS NULL
-                `),
+                db.query(`SELECT COUNT(*) as count FROM topics WHERE status = 'pending'`),
                 
                 // Комментарии на модерации
-                db.query(`
-                    SELECT COUNT(*) as count FROM comments 
-                    WHERE status = 'pending' OR status IS NULL
-                `),
+                db.query(`SELECT COUNT(*) as count FROM comments WHERE status = 'pending'`),
                 
                 // Жалобы
-                db.query(`
-                    SELECT COUNT(*) as count FROM reports 
-                    WHERE status = 'pending'
-                `),
+                db.query(`SELECT COUNT(*) as count FROM reports WHERE status = 'pending'`),
                 
                 // Пользователи с предупреждениями
-                db.query(`
-                    SELECT COUNT(DISTINCT user_id) as count FROM user_warnings 
-                    WHERE expires_at > NOW() OR expires_at IS NULL
-                `)
+                db.query(`SELECT COUNT(DISTINCT user_id) as count FROM user_warnings WHERE expires_at > NOW() OR expires_at IS NULL`)
             ]);
 
             const stats = {
@@ -85,7 +73,7 @@ const moderatorController = {
                 FROM topics t
                 LEFT JOIN users u ON t.user_id = u.id
                 LEFT JOIN categories c ON t.category_id = c.id
-                WHERE t.status = 'pending' OR t.status IS NULL
+                WHERE t.status = 'pending'
                 ORDER BY t.created_at ASC
             `);
 
@@ -162,7 +150,7 @@ const moderatorController = {
                 FROM comments c
                 LEFT JOIN users u ON c.user_id = u.id
                 LEFT JOIN topics t ON c.topic_id = t.id
-                WHERE c.status = 'pending' OR c.status IS NULL
+                WHERE c.status = 'pending'
                 ORDER BY c.created_at ASC
             `);
 

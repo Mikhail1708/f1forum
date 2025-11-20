@@ -36,7 +36,7 @@
               <span>👤 {{ topic.author_name }}</span>
               <span>📅 {{ formatDate(topic.created_at) }}</span>
               <span v-if="topic.tags" class="tags">
-                🏷️ {{ topic.tags.join(', ') }}
+                🏷️ {{ formatTags(topic.tags) }}
               </span>
             </div>
           </div>
@@ -108,6 +108,7 @@ const loadPendingContent = async () => {
     const topicsResponse = await api.get('/moderator/topics/pending');
     if (topicsResponse.data.success) {
       pendingTopics.value = topicsResponse.data.topics;
+      console.log('📝 Loaded topics:', pendingTopics.value);
     }
 
     // Загрузка комментариев на модерации
@@ -127,7 +128,7 @@ const loadPendingContent = async () => {
         content: 'Это тестовая тема, которая ожидает проверки модератором...',
         author_name: 'testuser',
         created_at: new Date().toISOString(),
-        tags: ['тест', 'модерация']
+        tags: 'тест,модерация' // Теперь это строка, а не массив
       }
     ];
     
@@ -143,6 +144,24 @@ const loadPendingContent = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// Функция для форматирования тегов
+const formatTags = (tags) => {
+  if (!tags) return '';
+  
+  // Если tags - это массив
+  if (Array.isArray(tags)) {
+    return tags.join(', ');
+  }
+  
+  // Если tags - это строка
+  if (typeof tags === 'string') {
+    return tags;
+  }
+  
+  // Если tags - это что-то другое
+  return String(tags);
 };
 
 const approveTopic = async (topicId) => {

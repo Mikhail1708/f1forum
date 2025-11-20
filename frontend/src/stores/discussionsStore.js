@@ -1,3 +1,4 @@
+// frontend/src/stores/discussionsStore.js
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import api from '../services/api';
@@ -8,42 +9,42 @@ export const useDiscussionsStore = defineStore('discussions', () => {
   const loading = ref(false);
   const error = ref(null);
 
-  const getCurrentUser = () => {
-    const userData = localStorage.getItem('user');
-    return userData ? JSON.parse(userData) : { username: 'Anonymous', id: null };
-  };
-
-  const isCurrentUserAuthor = (item) => {
-    const currentUser = getCurrentUser();
-    return item.author?.id === currentUser.id || item.user_id === currentUser.id;
-  };
-
-  // Загрузка всех обсуждений
+  // Загрузка всех обсуждений - ИСПРАВЛЕННАЯ
   const fetchDiscussions = async () => {
     loading.value = true;
+    error.value = null;
     try {
       console.log('🔄 Fetching discussions...');
       const response = await api.get('/topics');
-      discussions.value = response.data;
-      console.log('✅ Discussions loaded:', response.data.length);
+      
+      // ИСПРАВЛЕНИЕ: правильное извлечение данных
+      discussions.value = response.data.topics || [];
+      console.log('✅ Discussions loaded:', discussions.value.length);
+      console.log('📊 First discussion:', discussions.value[0]);
+      
     } catch (err) {
       console.error('❌ Fetch discussions error:', err);
       error.value = err.response?.data?.error || 'Ошибка загрузки обсуждений';
+      discussions.value = [];
     } finally {
       loading.value = false;
     }
   };
 
-  // Загрузка одного обсуждения
+  // Загрузка одного обсуждения - ИСПРАВЛЕННАЯ
   const fetchDiscussion = async (id) => {
     if (!id) return;
     
     loading.value = true;
+    error.value = null;
     try {
       console.log('🔄 Fetching discussion:', id);
       const response = await api.get(`/topics/${id}`);
-      currentDiscussion.value = response.data;
-      console.log('✅ Discussion loaded:', response.data);
+      
+      // ИСПРАВЛЕНИЕ: правильное извлечение данных
+      currentDiscussion.value = response.data.topic || response.data;
+      console.log('✅ Discussion loaded:', currentDiscussion.value);
+      
     } catch (err) {
       console.error('❌ Fetch discussion error:', err);
       error.value = err.response?.data?.error || 'Ошибка загрузки обсуждения';
@@ -52,7 +53,36 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Создание обсуждения
+  // Лайк обсуждения - ИСПРАВЛЕННАЯ
+  const likeDiscussion = async (discussionId) => {
+    try {
+      console.log('🔄 Liking discussion:', discussionId);
+      const response = await api.post(`/topics/${discussionId}/like`);
+      const { liked, likes } = response.data;
+
+      // Обновляем в текущем обсуждении
+      if (currentDiscussion.value?.id === discussionId) {
+        currentDiscussion.value.likes = likes;
+        currentDiscussion.value.liked = liked;
+      }
+
+      // Обновляем в списке обсуждений
+      const discussion = discussions.value.find(d => d.id === discussionId);
+      if (discussion) {
+        discussion.likes = likes;
+        discussion.liked = liked;
+      }
+      
+      console.log('✅ Discussion liked, new count:', likes);
+      
+    } catch (err) {
+      console.error('❌ Like discussion error:', err);
+      error.value = err.response?.data?.error || 'Ошибка при лайке обсуждения';
+      throw err;
+    }
+  };
+
+  // Остальные методы остаются без изменений...
   const createDiscussion = async (discussionData) => {
     try {
       console.log('🔄 Creating discussion:', discussionData);
@@ -66,18 +96,15 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Редактирование обсуждения
   const updateDiscussion = async (discussionId, discussionData) => {
     try {
       console.log('🔄 Updating discussion:', discussionId, discussionData);
       const response = await api.put(`/topics/${discussionId}`, discussionData);
       
-      // Обновляем в текущем обсуждении
       if (currentDiscussion.value?.id === discussionId) {
         currentDiscussion.value = { ...currentDiscussion.value, ...discussionData };
       }
       
-      // Обновляем в списке обсуждений
       const discussionIndex = discussions.value.findIndex(d => d.id === discussionId);
       if (discussionIndex !== -1) {
         discussions.value[discussionIndex] = { ...discussions.value[discussionIndex], ...discussionData };
@@ -92,116 +119,73 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Удаление обсуждения
   const deleteDiscussion = async (discussionId) => {
     try {
       console.log('🔄 Deleting discussion:', discussionId);
-      const response = await api.delete(`/topics/${discussionId}`);
-      console.log('✅ Delete discussion response:', response);
+      await api.delete(`/topics/${discussionId}`);
       await fetchDiscussions();
       console.log('✅ Discussion deleted');
     } catch (err) {
       console.error('❌ Delete discussion error:', err);
-      console.error('❌ Error details:', err.response?.status, err.response?.data);
       error.value = err.response?.data?.error || 'Ошибка удаления обсуждения';
       throw err;
     }
   };
 
-  // Лайк обсуждения
-  const likeDiscussion = async (discussionId) => {
-    try {
-      console.log('🔄 Liking discussion:', discussionId);
-      const response = await api.post(`/topics/${discussionId}/like`);
-      const { likes } = response.data;
-
-      if (currentDiscussion.value?.id === discussionId) {
-        currentDiscussion.value.likes = likes;
-      }
-
-      const discussion = discussions.value.find(d => d.id === discussionId);
-      if (discussion) {
-        discussion.likes = likes;
-      }
-      console.log('✅ Discussion liked');
-    } catch (err) {
-      console.error('❌ Like discussion error:', err);
-      error.value = err.response?.data?.error || 'Ошибка при лайке обсуждения';
-      throw err;
-    }
-  };
-
-  // Добавление комментария
   const addComment = async (discussionId, commentData) => {
     try {
       console.log('🔄 Adding comment:', { discussionId, commentData });
-      const response = await api.post('/comments', {
+      await api.post('/comments', {
         ...commentData,
         topic_id: discussionId
       });
-      console.log('✅ Add comment response:', response);
       await fetchDiscussion(discussionId);
       console.log('✅ Comment added');
     } catch (err) {
       console.error('❌ Add comment error:', err);
-      console.error('❌ Error details:', err.response?.status, err.response?.data);
       error.value = err.response?.data?.error || 'Ошибка добавления комментария';
       throw err;
     }
   };
 
-  // Редактирование комментария
   const updateComment = async (commentId, commentData) => {
     try {
       console.log('🔄 Updating comment:', commentId, commentData);
-      const response = await api.put(`/comments/${commentId}`, commentData);
-      console.log('✅ Update comment response:', response);
+      await api.put(`/comments/${commentId}`, commentData);
       await fetchDiscussion(currentDiscussion.value?.id);
       console.log('✅ Comment updated');
     } catch (err) {
       console.error('❌ Update comment error:', err);
-      console.error('❌ Error details:', err.response?.status, err.response?.data);
       error.value = err.response?.data?.error || 'Ошибка редактирования комментария';
       throw err;
     }
   };
 
-  // Удаление комментария
   const deleteComment = async (commentId) => {
     try {
       console.log('🔄 Deleting comment:', commentId);
-      const response = await api.delete(`/comments/${commentId}`);
-      console.log('✅ Delete comment response:', response);
+      await api.delete(`/comments/${commentId}`);
       await fetchDiscussion(currentDiscussion.value?.id);
       console.log('✅ Comment deleted');
     } catch (err) {
       console.error('❌ Delete comment error:', err);
-      console.error('❌ Error details:', err.response?.status, err.response?.data);
       error.value = err.response?.data?.error || 'Ошибка удаления комментария';
       throw err;
     }
   };
 
-  // Добавление ответа
   const addReply = async (commentId, replyData) => {
     try {
       console.log('🔄 Adding reply:', { commentId, replyData });
-      
-      // Используем endpoint для ответов
-      const response = await api.post('/comments/reply', {
+      await api.post('/comments/reply', {
         ...replyData,
         parent_id: commentId,
         topic_id: currentDiscussion.value?.id
       });
-      
-      console.log('✅ Add reply response:', response);
       await fetchDiscussion(currentDiscussion.value?.id);
       console.log('✅ Reply added');
     } catch (err) {
       console.error('❌ Add reply error:', err);
-      console.error('❌ Error details:', err.response?.status, err.response?.data);
-      
-      // Fallback: пробуем обычный комментарий с parent_id
       try {
         console.log('🔄 Trying fallback for reply...');
         await api.post('/comments', {
@@ -219,12 +203,10 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Лайк комментария
   const likeComment = async (commentId) => {
     try {
       console.log('🔄 Liking comment:', commentId);
-      const response = await api.post(`/comments/${commentId}/like`);
-      console.log('✅ Like comment response:', response);
+      await api.post(`/comments/${commentId}/like`);
       await fetchDiscussion(currentDiscussion.value?.id);
       console.log('✅ Comment liked');
     } catch (err) {
@@ -234,30 +216,33 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Вспомогательная функция для локального удаления комментария (fallback)
+  const getCurrentUser = () => {
+    const userData = localStorage.getItem('user');
+    return userData ? JSON.parse(userData) : { username: 'Anonymous', id: null };
+  };
+
+  const isCurrentUserAuthor = (item) => {
+    const currentUser = getCurrentUser();
+    return item.author?.id === currentUser.id || item.user_id === currentUser.id;
+  };
+
   const removeCommentLocally = (commentId) => {
     if (!currentDiscussion.value?.comments) return;
     
-    console.log('🔄 Removing comment locally:', commentId);
-    
-    // Удаляем из основных комментариев
     const commentIndex = currentDiscussion.value.comments.findIndex(
       comment => comment.id === commentId
     );
     
     if (commentIndex !== -1) {
       currentDiscussion.value.comments.splice(commentIndex, 1);
-      console.log('✅ Comment removed locally from main comments');
       return;
     }
     
-    // Удаляем из ответов
     currentDiscussion.value.comments.forEach(comment => {
       if (comment.replies) {
         const replyIndex = comment.replies.findIndex(reply => reply.id === commentId);
         if (replyIndex !== -1) {
           comment.replies.splice(replyIndex, 1);
-          console.log('✅ Comment removed locally from replies');
         }
       }
     });
