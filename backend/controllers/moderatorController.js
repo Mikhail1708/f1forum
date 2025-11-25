@@ -11,26 +11,22 @@ const moderatorController = {
                 pendingTopics,
                 pendingComments,
                 reportedContent,
-                warnedUsers
+                warnedUsers,
+                totalReports
             ] = await Promise.all([
-                // Темы на модерации
                 db.query(`SELECT COUNT(*) as count FROM topics WHERE status = 'pending'`),
-                
-                // Комментарии на модерации
                 db.query(`SELECT COUNT(*) as count FROM comments WHERE status = 'pending'`),
-                
-                // Жалобы
                 db.query(`SELECT COUNT(*) as count FROM reports WHERE status = 'pending'`),
-                
-                // Пользователи с предупреждениями
-                db.query(`SELECT COUNT(DISTINCT user_id) as count FROM user_warnings WHERE expires_at > NOW() OR expires_at IS NULL`)
+                db.query(`SELECT COUNT(DISTINCT user_id) as count FROM user_warnings WHERE expires_at > NOW() OR expires_at IS NULL`),
+                db.query(`SELECT COUNT(*) as count FROM reports WHERE status = 'resolved' AND resolved_at >= NOW() - INTERVAL '7 days'`)
             ]);
 
             const stats = {
                 pendingTopics: parseInt(pendingTopics.rows[0].count),
                 pendingComments: parseInt(pendingComments.rows[0].count),
                 reportedContent: parseInt(reportedContent.rows[0].count),
-                warnedUsers: parseInt(warnedUsers.rows[0].count)
+                warnedUsers: parseInt(warnedUsers.rows[0].count),
+                recentResolvedReports: parseInt(totalReports.rows[0].count)
             };
 
             console.log('📊 Moderator stats:', stats);
@@ -238,7 +234,7 @@ const moderatorController = {
         }
     },
 
-     // Выдать предупреждение пользователю
+    // Выдать предупреждение пользователю
     async warnUser(req, res) {
         try {
             const { userId } = req.params;
@@ -395,40 +391,31 @@ const moderatorController = {
             res.status(500).json({ success: false, error: error.message });
         }
     },
-    // Получить жалобы
-    async getPendingReports(req, res) {
-        try {
-            const reports = await db.query(`
-                SELECT 
-                    r.*,
-                    u1.username as reporter_name,
-                    u2.username as author_name,
-                    CASE 
-                        WHEN r.content_type = 'topic' THEN t.title
-                        WHEN r.content_type = 'comment' THEN LEFT(c.content, 100)
-                    END as content_preview
-                FROM reports r
-                LEFT JOIN users u1 ON r.reporter_id = u1.id
-                LEFT JOIN users u2 ON r.author_id = u2.id
-                LEFT JOIN topics t ON r.content_id = t.id AND r.content_type = 'topic'
-                LEFT JOIN comments c ON r.content_id = c.id AND r.content_type = 'comment'
-                WHERE r.status = 'pending'
-                ORDER BY r.created_at ASC
-            `);
 
-            res.json({
-                success: true,
-                reports: reports.rows
-            });
-        } catch (error) {
-            console.error('❌ Get pending reports error:', error);
-            res.status(500).json({ success: false, error: error.message });
-        }
-    },
-
-    // Получить решенные жалобы
-    async getResolvedReports(req, res) {
+    // Получить жалобы с пагинацией и фильтрацией
+    async getReports(req, res) {
         try {
+            const { 
+                page = 1, 
+                limit = 10, 
+                status = 'pending',
+                content_type,
+                sort_by = 'created_at',
+                sort_order = 'DESC'
+            } = req.query;
+            
+            const offset = (page - 1) * limit;
+
+            let whereClause = 'WHERE r.status = $1';
+            let queryParams = [status];
+            let paramCount = 1;
+
+            if (content_type) {
+                paramCount++;
+                whereClause += ` AND r.content_type = $${paramCount}`;
+                queryParams.push(content_type);
+            }
+
             const reports = await db.query(`
                 SELECT 
                     r.*,
@@ -438,65 +425,388 @@ const moderatorController = {
                     CASE 
                         WHEN r.content_type = 'topic' THEN t.title
                         WHEN r.content_type = 'comment' THEN LEFT(c.content, 100)
-                    END as content_preview
+                    END as content_preview,
+                    (SELECT COUNT(*) FROM report_notes WHERE report_id = r.id) as notes_count
                 FROM reports r
                 LEFT JOIN users u1 ON r.reporter_id = u1.id
                 LEFT JOIN users u2 ON r.author_id = u2.id
                 LEFT JOIN users u3 ON r.moderator_id = u3.id
                 LEFT JOIN topics t ON r.content_id = t.id AND r.content_type = 'topic'
                 LEFT JOIN comments c ON r.content_id = c.id AND r.content_type = 'comment'
-                WHERE r.status = 'resolved'
-                ORDER BY r.resolved_at DESC
-            `);
+                ${whereClause}
+                ORDER BY r.${sort_by} ${sort_order}
+                LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+            `, [...queryParams, parseInt(limit), offset]);
+
+            const totalCount = await db.query(
+                `SELECT COUNT(*) FROM reports r ${whereClause}`,
+                queryParams
+            );
 
             res.json({
                 success: true,
-                reports: reports.rows
+                reports: reports.rows,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total: parseInt(totalCount.rows[0].count),
+                    totalPages: Math.ceil(totalCount.rows[0].count / limit)
+                }
             });
         } catch (error) {
-            console.error('❌ Get resolved reports error:', error);
+            console.error('❌ Get reports error:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     },
 
-    // Обработать жалобу
-    async resolveReport(req, res) {
+    // Получить статистику по жалобам
+    async getReportsStats(req, res) {
+        try {
+            const stats = await db.query(`
+                SELECT 
+                    status,
+                    content_type,
+                    COUNT(*) as count
+                FROM reports 
+                GROUP BY status, content_type
+                ORDER BY status, content_type
+            `);
+
+            const weeklyStats = await db.query(`
+                SELECT 
+                    DATE(created_at) as date,
+                    COUNT(*) as count
+                FROM reports 
+                WHERE created_at >= NOW() - INTERVAL '30 days'
+                GROUP BY DATE(created_at)
+                ORDER BY date DESC
+            `);
+
+            res.json({
+                success: true,
+                stats: stats.rows,
+                weeklyStats: weeklyStats.rows
+            });
+        } catch (error) {
+            console.error('❌ Get reports stats error:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // Получить детали жалобы с комментариями и историей
+    async getReportDetails(req, res) {
         try {
             const { reportId } = req.params;
-            const { resolution } = req.body;
 
-            await db.query(`
-                UPDATE reports 
-                SET status = 'resolved', resolution = $1, moderator_id = $2, resolved_at = NOW()
-                WHERE id = $3
-            `, [resolution, req.userId, reportId]);
+            const report = await db.query(`
+                SELECT 
+                    r.*,
+                    u1.username as reporter_name,
+                    u1.email as reporter_email,
+                    u2.username as author_name,
+                    u2.email as author_email,
+                    u3.username as moderator_name,
+                    CASE 
+                        WHEN r.content_type = 'topic' THEN t.title
+                        WHEN r.content_type = 'comment' THEN c.content
+                    END as content_full,
+                    CASE 
+                        WHEN r.content_type = 'topic' THEN t.content
+                        WHEN r.content_type = 'comment' THEN NULL
+                    END as topic_content,
+                    CASE 
+                        WHEN r.content_type = 'topic' THEN t.created_at
+                        WHEN r.content_type = 'comment' THEN c.created_at
+                    END as content_created_at
+                FROM reports r
+                LEFT JOIN users u1 ON r.reporter_id = u1.id
+                LEFT JOIN users u2 ON r.author_id = u2.id
+                LEFT JOIN users u3 ON r.moderator_id = u3.id
+                LEFT JOIN topics t ON r.content_id = t.id AND r.content_type = 'topic'
+                LEFT JOIN comments c ON r.content_id = c.id AND r.content_type = 'comment'
+                WHERE r.id = $1
+            `, [reportId]);
 
-            // Если контент удален - удаляем его
-            if (resolution === 'removed') {
-                const report = await db.query(
-                    'SELECT content_type, content_id FROM reports WHERE id = $1',
-                    [reportId]
-                );
-                
-                if (report.rows[0].content_type === 'topic') {
-                    await db.query('DELETE FROM topics WHERE id = $1', [report.rows[0].content_id]);
-                } else if (report.rows[0].content_type === 'comment') {
-                    await db.query('DELETE FROM comments WHERE id = $1', [report.rows[0].content_id]);
-                }
+            if (report.rows.length === 0) {
+                return res.status(404).json({ 
+                    success: false, 
+                    error: 'Жалоба не найдена' 
+                });
             }
+
+            // Получаем комментарии модераторов к жалобе
+            const notes = await db.query(`
+                SELECT 
+                    rn.*,
+                    u.username as moderator_name,
+                    u.role as moderator_role
+                FROM report_notes rn
+                LEFT JOIN users u ON rn.moderator_id = u.id
+                WHERE rn.report_id = $1
+                ORDER BY rn.created_at ASC
+            `, [reportId]);
+
+            // Получаем историю действий по жалобе
+            const history = await db.query(`
+                SELECT 
+                    action_type,
+                    description,
+                    created_at
+                FROM moderator_actions 
+                WHERE description LIKE $1 OR description LIKE $2
+                ORDER BY created_at DESC
+            `, [`%жалоба #${reportId}%`, `%report #${reportId}%`]);
+
+            res.json({
+                success: true,
+                report: report.rows[0],
+                notes: notes.rows,
+                history: history.rows
+            });
+        } catch (error) {
+            console.error('❌ Get report details error:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // Добавить комментарий к жалобе
+    async addReportNote(req, res) {
+        try {
+            const { reportId } = req.params;
+            const { note } = req.body;
+            const moderator_id = req.userId;
+
+            if (!note || !note.trim()) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Комментарий не может быть пустым' 
+                });
+            }
+
+            // Проверяем существование жалобы
+            const reportCheck = await db.query(
+                'SELECT id FROM reports WHERE id = $1',
+                [reportId]
+            );
+
+            if (reportCheck.rows.length === 0) {
+                return res.status(404).json({ 
+                    success: false, 
+                    error: 'Жалоба не найдена' 
+                });
+            }
+
+            const result = await db.query(`
+                INSERT INTO report_notes (report_id, moderator_id, note)
+                VALUES ($1, $2, $3)
+                RETURNING *, (SELECT username FROM users WHERE id = $2) as moderator_name
+            `, [reportId, moderator_id, note.trim()]);
 
             // Логируем действие
             await db.query(`
                 INSERT INTO moderator_actions (moderator_id, action_type, description)
                 VALUES ($1, $2, $3)
-            `, [req.userId, 'report_resolved', `Обработана жалоба #${reportId}`]);
+            `, [moderator_id, 'report_note_added', `Добавлен комментарий к жалобе #${reportId}`]);
 
             res.json({
                 success: true,
-                message: 'Report resolved successfully'
+                note: result.rows[0],
+                message: 'Комментарий добавлен'
+            });
+        } catch (error) {
+            console.error('❌ Add report note error:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // Удалить комментарий к жалобе
+    async deleteReportNote(req, res) {
+        try {
+            const { noteId } = req.params;
+            const moderator_id = req.userId;
+
+            const note = await db.query(
+                'SELECT * FROM report_notes WHERE id = $1',
+                [noteId]
+            );
+
+            if (note.rows.length === 0) {
+                return res.status(404).json({ 
+                    success: false, 
+                    error: 'Комментарий не найден' 
+                });
+            }
+
+            // Проверяем, что комментарий принадлежит текущему модератору
+            if (note.rows[0].moderator_id !== moderator_id) {
+                return res.status(403).json({ 
+                    success: false, 
+                    error: 'Вы можете удалять только свои комментарии' 
+                });
+            }
+
+            await db.query('DELETE FROM report_notes WHERE id = $1', [noteId]);
+
+            res.json({
+                success: true,
+                message: 'Комментарий удален'
+            });
+        } catch (error) {
+            console.error('❌ Delete report note error:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // Обработать жалобу (расширенная версия)
+    async resolveReport(req, res) {
+        try {
+            const { reportId } = req.params;
+            const { action, moderator_notes } = req.body;
+            const moderator_id = req.userId;
+
+            console.log('🔧 Resolving report:', { reportId, action, moderator_id });
+
+            const report = await db.query(
+                'SELECT * FROM reports WHERE id = $1',
+                [reportId]
+            );
+
+            if (report.rows.length === 0) {
+                return res.status(404).json({ 
+                    success: false, 
+                    error: 'Жалоба не найдена' 
+                });
+            }
+
+            const reportData = report.rows[0];
+            
+            if (reportData.status === 'resolved') {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Жалоба уже обработана' 
+                });
+            }
+
+            let resolution = '';
+            let actionDescription = '';
+
+            // Выполняем действие
+            if (action === 'remove_content') {
+                if (reportData.content_type === 'topic') {
+                    await db.query('DELETE FROM topics WHERE id = $1', [reportData.content_id]);
+                    resolution = 'Контент удален: обсуждение';
+                    actionDescription = 'Удалено обсуждение';
+                } else if (reportData.content_type === 'comment') {
+                    await db.query('DELETE FROM comments WHERE id = $1', [reportData.content_id]);
+                    resolution = 'Контент удален: комментарий';
+                    actionDescription = 'Удален комментарий';
+                }
+            } else if (action === 'dismiss') {
+                resolution = 'Жалоба отклонена - нарушений не обнаружено';
+                actionDescription = 'Жалоба отклонена';
+            } else if (action === 'warn_user') {
+                resolution = 'Пользователю выдано предупреждение';
+                actionDescription = 'Выдано предупреждение пользователю';
+                
+                // Добавляем предупреждение пользователю
+                await db.query(`
+                    INSERT INTO user_warnings (user_id, moderator_id, reason)
+                    VALUES ($1, $2, $3)
+                `, [reportData.author_id, moderator_id, `Жалоба #${reportId}: ${moderator_notes || 'Нарушение правил сообщества'}`]);
+            } else {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Неверное действие' 
+                });
+            }
+
+            // Обновляем жалобу
+            await db.query(`
+                UPDATE reports 
+                SET status = 'resolved', 
+                    resolution = $1,
+                    moderator_id = $2,
+                    moderator_notes = $3,
+                    resolved_at = NOW()
+                WHERE id = $4
+            `, [resolution, moderator_id, moderator_notes, reportId]);
+
+            // Логируем действие
+            await db.query(`
+                INSERT INTO moderator_actions (moderator_id, action_type, description)
+                VALUES ($1, $2, $3)
+            `, [moderator_id, 'report_resolved', `Обработана жалоба #${reportId}: ${actionDescription}`]);
+
+            // Если есть moderator_notes, добавляем их как комментарий
+            if (moderator_notes && moderator_notes.trim()) {
+                await db.query(`
+                    INSERT INTO report_notes (report_id, moderator_id, note)
+                    VALUES ($1, $2, $3)
+                `, [reportId, moderator_id, `Решение модератора: ${moderator_notes.trim()}`]);
+            }
+
+            console.log('✅ Report resolved:', reportId);
+
+            res.json({
+                success: true,
+                message: 'Жалоба успешно обработана',
+                resolution: resolution
             });
         } catch (error) {
             console.error('❌ Resolve report error:', error);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    },
+
+    // Изменить решение по жалобе (переоткрыть или изменить статус)
+    async updateReportResolution(req, res) {
+        try {
+            const { reportId } = req.params;
+            const { status, resolution, moderator_notes } = req.body;
+            const moderator_id = req.userId;
+
+            const report = await db.query(
+                'SELECT * FROM reports WHERE id = $1',
+                [reportId]
+            );
+
+            if (report.rows.length === 0) {
+                return res.status(404).json({ 
+                    success: false, 
+                    error: 'Жалоба не найдена' 
+                });
+            }
+
+            await db.query(`
+                UPDATE reports 
+                SET status = $1,
+                    resolution = $2,
+                    moderator_notes = $3,
+                    moderator_id = $4,
+                    resolved_at = CASE 
+                        WHEN $1 = 'pending' THEN NULL 
+                        ELSE COALESCE(resolved_at, NOW()) 
+                    END
+                WHERE id = $5
+            `, [status, resolution, moderator_notes, moderator_id, reportId]);
+
+            // Логируем изменение
+            const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
+            const description = status === 'pending' 
+                ? `Переоткрыта жалоба #${reportId}` 
+                : `Обновлено решение по жалобе #${reportId}`;
+
+            await db.query(`
+                INSERT INTO moderator_actions (moderator_id, action_type, description)
+                VALUES ($1, $2, $3)
+            `, [moderator_id, actionType, description]);
+
+            res.json({
+                success: true,
+                message: 'Решение по жалобе обновлено'
+            });
+        } catch (error) {
+            console.error('❌ Update report resolution error:', error);
             res.status(500).json({ success: false, error: error.message });
         }
     }

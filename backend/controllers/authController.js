@@ -8,7 +8,7 @@ const authController = {
     try {
       const { email, password } = req.body;
 
-      console.log('Login attempt for:', email);
+      console.log('🔐 Login attempt for:', email);
 
       // Проверяем существование пользователя
       const { rows } = await db.query(
@@ -17,31 +17,32 @@ const authController = {
       );
 
       if (rows.length === 0) {
-        console.log('User not found:', email);
+        console.log('❌ User not found:', email);
         return res.status(401).json({ 
           success: false, 
-          error: 'Invalid credentials' 
+          error: 'Неверный email или пароль' 
         });
       }
 
       const user = rows[0];
 
-      // Проверяем пароль
-      const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+      // ВАЖНОЕ ИСПРАВЛЕНИЕ: проверяем правильное поле пароля
+      const isPasswordValid = await bcrypt.compare(password, user.password_hash || user.password);
       
       if (!isPasswordValid) {
-        console.log('Invalid password for:', email);
+        console.log('❌ Invalid password for:', email);
         return res.status(401).json({ 
           success: false, 
-          error: 'Invalid credentials' 
+          error: 'Неверный email или пароль' 
         });
       }
 
-      // Проверяем статус пользователя
-      if (user.status === 'banned') {
+      // ВАЖНОЕ ИСПРАВЛЕНИЕ: проверяем статус пользователя
+      if (user.status === 'suspended' || user.status === 'banned') {
+        console.log('🚫 Blocked user tried to login:', email, 'Status:', user.status);
         return res.status(403).json({ 
           success: false, 
-          error: 'Account is banned' 
+          error: 'Ваш аккаунт заблокирован. Обратитесь к администратору.' 
         });
       }
 
@@ -59,9 +60,9 @@ const authController = {
       );
 
       // Убираем пароль из ответа
-      const { password_hash, ...userWithoutPassword } = user;
+      const { password_hash, password: pwd, ...userWithoutPassword } = user;
 
-      console.log('Login successful for:', email);
+      console.log('✅ Login successful for:', user.username, 'Role:', user.role, 'Status:', user.status);
 
       res.json({
         success: true,
@@ -71,10 +72,10 @@ const authController = {
       });
 
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Internal server error' 
+        error: 'Ошибка сервера' 
       });
     }
   },
@@ -83,7 +84,7 @@ const authController = {
     try {
       const { username, email, password, favorite_team, favorite_driver } = req.body;
 
-      console.log('Registration attempt for:', email);
+      console.log('👤 Registration attempt for:', email);
 
       // Проверяем, существует ли пользователь
       const existingUser = await db.query(
@@ -94,7 +95,7 @@ const authController = {
       if (existingUser.rows.length > 0) {
         return res.status(400).json({ 
           success: false, 
-          error: 'User already exists' 
+          error: 'Пользователь с таким email или именем уже существует' 
         });
       }
 
@@ -104,8 +105,8 @@ const authController = {
 
       // Создаем пользователя
       const { rows } = await db.query(
-        `INSERT INTO users (username, email, password_hash, favorite_team, favorite_driver) 
-         VALUES ($1, $2, $3, $4, $5) 
+        `INSERT INTO users (username, email, password_hash, favorite_team, favorite_driver, status) 
+         VALUES ($1, $2, $3, $4, $5, 'active') 
          RETURNING id, username, email, role, status, favorite_team, favorite_driver, created_at`,
         [username, email, password_hash, favorite_team, favorite_driver]
       );
@@ -119,20 +120,20 @@ const authController = {
         { expiresIn: '7d' }
       );
 
-      console.log('Registration successful for:', email);
+      console.log('✅ Registration successful for:', email);
 
       res.status(201).json({
         success: true,
         token,
         user: newUser,
-        message: 'Registration successful'
+        message: 'Регистрация успешна'
       });
 
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('❌ Registration error:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Internal server error' 
+        error: 'Ошибка сервера' 
       });
     }
   },
@@ -149,24 +150,54 @@ const authController = {
       if (rows.length === 0) {
         return res.status(404).json({ 
           success: false, 
-          error: 'User not found' 
+          error: 'Пользователь не найден' 
+        });
+      }
+
+      const user = rows[0];
+
+      // Проверяем статус при получении профиля
+      if (user.status === 'suspended' || user.status === 'banned') {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'Аккаунт заблокирован' 
         });
       }
 
       res.json({
         success: true,
-        user: rows[0]
+        user: user
       });
 
     } catch (error) {
-      console.error('Get me error:', error);
+      console.error('❌ Get me error:', error);
       res.status(500).json({ 
         success: false, 
-        error: 'Internal server error' 
+        error: 'Ошибка сервера' 
+      });
+    }
+  },
+
+  // Выход из системы (логика на фронтенде, но можно добавить blacklist токенов)
+  async logout(req, res) {
+    try {
+      // В реальном приложении здесь можно добавить токен в blacklist
+      console.log('🚪 User logout:', req.userId);
+      
+      res.json({
+        success: true,
+        message: 'Logout successful'
+      });
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Ошибка сервера' 
       });
     }
   }
 };
+
 // Создание тестового модератора (для разработки)
 const createTestModerator = async () => {
     try {
@@ -178,9 +209,9 @@ const createTestModerator = async () => {
         if (rows.length === 0) {
             const password_hash = await bcrypt.hash('moderator123', 10);
             await db.query(
-                `INSERT INTO users (username, email, password_hash, role, is_moderator) 
+                `INSERT INTO users (username, email, password_hash, role, status) 
                  VALUES ($1, $2, $3, $4, $5)`,
-                ['moderator', 'moderator@f1forum.com', password_hash, 'moderator', true]
+                ['moderator', 'moderator@f1forum.com', password_hash, 'moderator', 'active']
             );
             console.log('✅ Test moderator created');
             console.log('📧 Login: moderator@f1forum.com');

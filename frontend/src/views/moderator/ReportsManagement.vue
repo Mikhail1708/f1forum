@@ -2,76 +2,108 @@
 <template>
   <div class="reports-management">
     <div class="page-header">
-      <h1>Управление жалобами</h1>
-      <div class="header-tabs">
-        <button 
-          @click="activeTab = 'pending'" 
-          :class="['tab-btn', { active: activeTab === 'pending' }]"
-        >
-          Ожидающие ({{ pendingReports.length }})
-        </button>
-        <button 
-          @click="activeTab = 'resolved'" 
-          :class="['tab-btn', { active: activeTab === 'resolved' }]"
-        >
-          Решенные ({{ resolvedReports.length }})
-        </button>
+      <h1>🚨 Управление жалобами</h1>
+      <div class="header-controls">
+        <div class="header-tabs">
+          <button 
+            @click="activeTab = 'pending'" 
+            :class="['tab-btn', { active: activeTab === 'pending' }]"
+          >
+            Ожидающие ({{ pendingReports.length }})
+          </button>
+          <button 
+            @click="activeTab = 'resolved'" 
+            :class="['tab-btn', { active: activeTab === 'resolved' }]"
+          >
+            Решенные ({{ resolvedReports.length }})
+          </button>
+        </div>
       </div>
     </div>
 
-    <div v-if="loading" class="loading">Загрузка жалоб...</div>
+    <div v-if="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Загрузка жалоб...</p>
+    </div>
 
-    <div v-else class="reports-list">
-      <div v-if="activeTab === 'pending' && pendingReports.length === 0" class="no-reports">
-        <p>Нет ожидающих жалоб 🎉</p>
-      </div>
+    <div v-else class="reports-content">
+      <!-- Список жалоб -->
+      <div class="reports-list">
+        <div v-if="currentReports.length === 0" class="no-reports">
+          <p>🎉 Нет жалоб для отображения</p>
+        </div>
 
-      <div v-else-if="activeTab === 'resolved' && resolvedReports.length === 0" class="no-reports">
-        <p>Нет решенных жалоб</p>
-      </div>
-
-      <div v-else class="reports-container">
-        <div 
-          v-for="report in currentReports" 
-          :key="report.id" 
-          class="report-card"
-          :class="{ resolved: report.status === 'resolved' }"
-        >
-          <div class="report-header">
-            <span class="report-type">{{ getReportTypeText(report.type) }}</span>
-            <span class="report-date">{{ formatDate(report.created_at) }}</span>
-          </div>
-          
-          <div class="report-content">
-            <p class="report-reason"><strong>Причина:</strong> {{ report.reason }}</p>
+        <div v-else class="reports-container">
+          <div 
+            v-for="report in currentReports" 
+            :key="report.id" 
+            class="report-card"
+            :class="{ resolved: report.status === 'resolved' }"
+          >
+            <div class="report-header">
+              <div class="report-type-badge">
+                <span class="type-icon">{{ getContentTypeIcon(report.content_type) }}</span>
+                <span class="type-text">{{ getContentTypeText(report.content_type) }}</span>
+              </div>
+              
+              <div class="report-meta">
+                <span class="report-id">#{{ report.id }}</span>
+                <span class="report-date">{{ formatDate(report.created_at) }}</span>
+              </div>
+            </div>
             
-            <div class="reported-content">
-              <h4>Содержание:</h4>
-              <p>{{ report.content_preview }}</p>
+            <div class="report-content">
+              <div class="reason-section">
+                <h4>Причина жалобы:</h4>
+                <p class="report-reason">{{ report.reason }}</p>
+              </div>
+
+              <div class="content-section">
+                <h4>Содержание:</h4>
+                <div class="content-preview">
+                  <p>{{ report.content_preview || 'Содержание не доступно' }}</p>
+                </div>
+              </div>
+
+              <div class="users-section">
+                <div class="user-info">
+                  <span class="user-label">👤 Жалоба от:</span>
+                  <span class="user-name">{{ report.reporter_name }}</span>
+                </div>
+                <div class="user-info">
+                  <span class="user-label">🎯 Автор контента:</span>
+                  <span class="user-name">{{ report.author_name }}</span>
+                </div>
+              </div>
             </div>
 
-            <div class="report-meta">
-              <span>👤 Жалоба от: {{ report.reporter_name }}</span>
-              <span>🎯 Автор: {{ report.author_name }}</span>
+            <!-- Действия для ожидающих жалоб -->
+            <div class="report-actions" v-if="report.status === 'pending'">
+              <button @click="quickResolve(report.id, 'dismiss')" class="btn btn-success">
+                ✅ Отклонить жалобу
+              </button>
+              <button @click="quickResolve(report.id, 'remove_content')" class="btn btn-danger">
+                🗑️ Удалить контент
+              </button>
+              <button @click="quickResolve(report.id, 'warn_user')" class="btn btn-warning">
+                ⚠️ Предупредить
+              </button>
+              <button @click="viewOriginalContent(report)" class="btn btn-info">
+                👁️ Просмотр
+              </button>
             </div>
-          </div>
 
-          <div class="report-actions" v-if="report.status === 'pending'">
-            <button @click="resolveReport(report.id, 'approved')" class="btn btn-success">
-              ✅ Одобрить контент
-            </button>
-            <button @click="resolveReport(report.id, 'removed')" class="btn btn-danger">
-              🗑️ Удалить контент
-            </button>
-            <button @click="viewContent(report.content_type, report.content_id)" class="btn btn-secondary">
-              👁️ Просмотр
-            </button>
-          </div>
-
-          <div v-else class="report-resolution">
-            <p><strong>Решение:</strong> {{ getResolutionText(report.resolution) }}</p>
-            <p><strong>Модератор:</strong> {{ report.moderator_name }}</p>
-            <p><strong>Дата:</strong> {{ formatDate(report.resolved_at) }}</p>
+            <!-- Информация о решении -->
+            <div v-else class="report-resolution">
+              <h4>Решение модератора:</h4>
+              <p><strong>Действие:</strong> {{ getResolutionText(report.resolution) }}</p>
+              <p v-if="report.moderator_notes"><strong>Комментарий:</strong> {{ report.moderator_notes }}</p>
+              <p><strong>Модератор:</strong> {{ report.moderator_name || 'Система' }}</p>
+              <p><strong>Дата решения:</strong> {{ formatDate(report.resolved_at) }}</p>
+              <button @click="reopenReport(report.id)" class="btn btn-outline">
+                🔄 Переоткрыть
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -79,131 +111,210 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import api from '../../services/api';
+<script>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import api from '../../services/api'
 
-const router = useRouter();
-const activeTab = ref('pending');
-const pendingReports = ref([]);
-const resolvedReports = ref([]);
-const loading = ref(false);
+export default {
+  name: 'ReportsManagement',
+  setup() {
+    const router = useRouter()
 
-const currentReports = computed(() => {
-  return activeTab.value === 'pending' ? pendingReports.value : resolvedReports.value;
-});
+    // Состояние
+    const activeTab = ref('pending')
+    const reports = ref({
+      pending: [],
+      resolved: []
+    })
+    const loading = ref(false)
 
-onMounted(async () => {
-  await loadReports();
-});
+    // Computed
+    const currentReports = computed(() => {
+      return reports.value[activeTab.value] || []
+    })
 
-const loadReports = async () => {
-  try {
-    loading.value = true;
-    
-    // Загрузка ожидающих жалоб
-    const pendingResponse = await api.get('/moderator/reports/pending');
-    if (pendingResponse.data.success) {
-      pendingReports.value = pendingResponse.data.reports;
+    const pendingReports = computed(() => reports.value.pending || [])
+    const resolvedReports = computed(() => reports.value.resolved || [])
+
+    // Методы
+    onMounted(async () => {
+      await loadReports()
+    })
+
+    const loadReports = async () => {
+      loading.value = true
+      try {
+        // Загрузка ожидающих жалоб
+        const pendingResponse = await api.get('/moderator/reports?status=pending')
+        if (pendingResponse.data.success) {
+          reports.value.pending = pendingResponse.data.reports
+        }
+
+        // Загрузка решенных жалоб
+        const resolvedResponse = await api.get('/moderator/reports?status=resolved')
+        if (resolvedResponse.data.success) {
+          reports.value.resolved = resolvedResponse.data.reports
+        }
+
+      } catch (error) {
+        console.error('❌ Ошибка загрузки жалоб:', error)
+        
+        // Заглушки для демонстрации
+        reports.value.pending = getMockReports('pending')
+        reports.value.resolved = getMockReports('resolved')
+      } finally {
+        loading.value = false
+      }
     }
 
-    // Загрузка решенных жалоб
-    const resolvedResponse = await api.get('/moderator/reports/resolved');
-    if (resolvedResponse.data.success) {
-      resolvedReports.value = resolvedResponse.data.reports;
+    const quickResolve = async (reportId, action) => {
+      const actionText = getActionText(action)
+      if (!confirm(`Вы уверены, что хотите ${actionText}?`)) return
+
+      try {
+        const response = await api.post(`/moderator/reports/${reportId}/resolve`, {
+          action,
+          moderator_notes: `Быстрое решение: ${actionText}`
+        })
+
+        if (response.data.success) {
+          await loadReports()
+          alert('Жалоба успешно обработана')
+        }
+      } catch (error) {
+        console.error('❌ Ошибка обработки жалобы:', error)
+        alert('Ошибка обработки жалобы')
+      }
     }
 
-  } catch (error) {
-    console.error('Ошибка загрузки жалоб:', error);
-    
+    const reopenReport = async (reportId) => {
+      if (!confirm('Переоткрыть эту жалобу?')) return
+
+      try {
+        const response = await api.put(`/moderator/reports/${reportId}/resolution`, {
+          status: 'pending',
+          resolution: '',
+          moderator_notes: 'Жалоба переоткрыта'
+        })
+
+        if (response.data.success) {
+          await loadReports()
+          alert('Жалоба переоткрыта')
+        }
+      } catch (error) {
+        console.error('❌ Ошибка переоткрытия жалобы:', error)
+        alert('Ошибка переоткрытия жалобы')
+      }
+    }
+
+    const viewOriginalContent = (report) => {
+      if (report.content_type === 'topic') {
+        router.push(`/discussion/${report.content_id}`)
+      } else {
+        // Для комментариев переходим к обсуждению
+        router.push(`/discussion/${report.content_id}`)
+      }
+    }
+
+    // Вспомогательные функции
+    const getContentTypeIcon = (type) => {
+      return type === 'topic' ? '📝' : '💬'
+    }
+
+    const getContentTypeText = (type) => {
+      return type === 'topic' ? 'Тема' : 'Комментарий'
+    }
+
+    const getResolutionText = (resolution) => {
+      const resolutions = {
+        'removed': 'Контент удален',
+        'dismiss': 'Жалоба отклонена',
+        'warn_user': 'Пользователь предупрежден',
+        'approved': 'Контент одобрен'
+      }
+      return resolutions[resolution] || resolution
+    }
+
+    const getActionText = (action) => {
+      const actions = {
+        'remove_content': 'удалить контент',
+        'dismiss': 'отклонить жалобу',
+        'warn_user': 'предупредить пользователя'
+      }
+      return actions[action] || action
+    }
+
+    const formatDate = (dateString) => {
+      return new Date(dateString).toLocaleString('ru-RU')
+    }
+
     // Заглушки для демонстрации
-    pendingReports.value = [
-      {
-        id: 1,
-        type: 'spam',
-        reason: 'Спам сообщение',
-        content_preview: 'Это тестовое спам сообщение...',
-        reporter_name: 'user1',
-        author_name: 'spammer',
-        created_at: new Date().toISOString(),
-        content_type: 'comment',
-        content_id: 1,
-        status: 'pending'
+    const getMockReports = (status) => {
+      if (status === 'pending') {
+        return [
+          {
+            id: 1,
+            content_type: 'topic',
+            reason: 'Спам сообщение',
+            content_preview: 'Это тестовое спам сообщение...',
+            reporter_name: 'user1',
+            author_name: 'spammer',
+            created_at: new Date().toISOString(),
+            status: 'pending',
+            content_id: 1
+          },
+          {
+            id: 2,
+            content_type: 'comment',
+            reason: 'Оскорбления',
+            content_preview: 'Неуместный комментарий...',
+            reporter_name: 'user2',
+            author_name: 'author123',
+            created_at: new Date(Date.now() - 3600000).toISOString(),
+            status: 'pending',
+            content_id: 2
+          }
+        ]
+      } else {
+        return [
+          {
+            id: 3,
+            content_type: 'comment',
+            reason: 'Нецензурная лексика',
+            content_preview: 'Этот комментарий был удален...',
+            reporter_name: 'user3',
+            author_name: 'author456',
+            created_at: new Date(Date.now() - 86400000).toISOString(),
+            resolved_at: new Date().toISOString(),
+            resolution: 'removed',
+            moderator_name: 'moderator',
+            moderator_notes: 'Нарушение правил сообщества',
+            status: 'resolved',
+            content_id: 3
+          }
+        ]
       }
-    ];
-    
-    resolvedReports.value = [
-      {
-        id: 2,
-        type: 'inappropriate',
-        reason: 'Неуместный контент',
-        content_preview: 'Этот контент был удален...',
-        reporter_name: 'user2',
-        author_name: 'author',
-        created_at: new Date(Date.now() - 86400000).toISOString(),
-        resolved_at: new Date().toISOString(),
-        resolution: 'removed',
-        moderator_name: 'moderator',
-        status: 'resolved'
-      }
-    ];
-  } finally {
-    loading.value = false;
-  }
-};
-
-const resolveReport = async (reportId, resolution) => {
-  try {
-    const response = await api.post(`/moderator/reports/${reportId}/resolve`, {
-      resolution: resolution
-    });
-    
-    if (response.data.success) {
-      // Обновляем список жалоб
-      await loadReports();
-      alert('Жалоба успешно обработана');
-    } else {
-      alert('Ошибка обработки жалобы: ' + response.data.error);
     }
-  } catch (error) {
-    console.error('Ошибка обработки жалобы:', error);
-    alert('Ошибка обработки жалобы: ' + error.message);
+
+    return {
+      activeTab,
+      reports,
+      loading,
+      currentReports,
+      pendingReports,
+      resolvedReports,
+      loadReports,
+      quickResolve,
+      reopenReport,
+      viewOriginalContent,
+      getContentTypeIcon,
+      getContentTypeText,
+      getResolutionText,
+      formatDate
+    }
   }
-};
-
-const viewContent = (contentType, contentId) => {
-  if (contentType === 'topic') {
-    router.push(`/discussion/${contentId}`);
-  } else if (contentType === 'comment') {
-    // Находим тему для комментария
-    router.push(`/discussion/${contentId}`); // В реальном приложении нужно получить ID темы
-  }
-};
-
-const getReportTypeText = (type) => {
-  const types = {
-    spam: '🚫 Спам',
-    inappropriate: '🔞 Неуместный контент',
-    harassment: '⚖️ Оскорбления',
-    copyright: '©️ Нарушение авторских прав',
-    other: '❓ Другое'
-  };
-  return types[type] || type;
-};
-
-const getResolutionText = (resolution) => {
-  const resolutions = {
-    approved: 'Контент одобрен',
-    removed: 'Контент удален',
-    warned: 'Пользователь предупрежден'
-  };
-  return resolutions[resolution] || resolution;
-};
-
-const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleString('ru-RU');
-};
+}
 </script>
 
 <style scoped>
@@ -215,10 +326,13 @@ const formatDate = (dateString) => {
   margin-bottom: 2rem;
 }
 
+.header-controls {
+  margin-top: 1rem;
+}
+
 .header-tabs {
   display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.5rem;
 }
 
 .tab-btn {
@@ -228,6 +342,7 @@ const formatDate = (dateString) => {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.3s ease;
+  font-weight: 500;
 }
 
 .tab-btn.active {
@@ -236,24 +351,29 @@ const formatDate = (dateString) => {
   border-color: #3498db;
 }
 
-.reports-list {
+/* Список жалоб */
+.reports-content {
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  padding: 1.5rem;
+  overflow: hidden;
 }
 
 .reports-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  padding: 1.5rem;
 }
 
 .report-card {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   padding: 1.5rem;
+  margin-bottom: 1rem;
   background: #fafafa;
+  transition: all 0.3s ease;
+}
+
+.report-card:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
 .report-card.resolved {
@@ -270,49 +390,91 @@ const formatDate = (dateString) => {
   border-bottom: 1px solid #e0e0e0;
 }
 
-.report-type {
+.report-type-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-weight: bold;
-  color: #e74c3c;
 }
 
-.report-card.resolved .report-type {
-  color: #27ae60;
-}
-
-.report-date {
-  color: #7f8c8d;
-  font-size: 0.9rem;
-}
-
-.report-content {
-  margin-bottom: 1rem;
-}
-
-.report-reason {
-  margin: 0 0 1rem 0;
-  font-weight: 500;
-}
-
-.reported-content {
-  background: white;
-  padding: 1rem;
-  border-radius: 4px;
-  border-left: 4px solid #3498db;
-  margin-bottom: 1rem;
-}
-
-.reported-content h4 {
-  margin: 0 0 0.5rem 0;
-  color: #2c3e50;
+.type-icon {
+  font-size: 1.2rem;
 }
 
 .report-meta {
   display: flex;
+  align-items: center;
   gap: 1rem;
   font-size: 0.9rem;
-  color: #7f8c8d;
+  color: #666;
 }
 
+.report-id {
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+/* Контент жалобы */
+.report-content {
+  margin-bottom: 1rem;
+}
+
+.reason-section,
+.content-section,
+.users-section {
+  margin-bottom: 1rem;
+}
+
+.reason-section h4,
+.content-section h4 {
+  margin: 0 0 0.5rem 0;
+  color: #2c3e50;
+  font-size: 1rem;
+}
+
+.report-reason {
+  margin: 0;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 4px;
+  border-left: 4px solid #e74c3c;
+}
+
+.content-preview {
+  background: white;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.content-preview p {
+  margin: 0;
+  font-style: italic;
+  color: #666;
+}
+
+.users-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.user-label {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.user-name {
+  font-weight: 500;
+}
+
+/* Действия */
 .report-actions {
   display: flex;
   gap: 0.5rem;
@@ -326,17 +488,33 @@ const formatDate = (dateString) => {
   border-left: 4px solid #27ae60;
 }
 
+.report-resolution h4 {
+  margin: 0 0 0.5rem 0;
+  color: #27ae60;
+}
+
 .report-resolution p {
   margin: 0.25rem 0;
 }
 
+/* Кнопки */
 .btn {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
-  transition: background-color 0.3s;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.btn-info {
+  background: #3498db;
+  color: white;
 }
 
 .btn-success {
@@ -344,37 +522,73 @@ const formatDate = (dateString) => {
   color: white;
 }
 
-.btn-success:hover {
-  background: #219a52;
-}
-
 .btn-danger {
   background: #e74c3c;
   color: white;
 }
 
-.btn-danger:hover {
-  background: #c0392b;
-}
-
-.btn-secondary {
-  background: #95a5a6;
+.btn-warning {
+  background: #f39c12;
   color: white;
 }
 
-.btn-secondary:hover {
-  background: #7f8c8d;
+.btn-outline {
+  background: transparent;
+  color: #3498db;
+  border: 1px solid #3498db;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Загрузка */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .no-reports {
   text-align: center;
   padding: 3rem;
-  color: #7f8c8d;
+  color: #666;
 }
 
-.loading {
-  text-align: center;
-  padding: 3rem;
-  color: #7f8c8d;
+/* Адаптивность */
+@media (max-width: 768px) {
+  .header-tabs {
+    flex-direction: column;
+  }
+  
+  .users-section {
+    grid-template-columns: 1fr;
+  }
+  
+  .report-actions {
+    flex-direction: column;
+  }
+  
+  .report-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
 }
 </style>

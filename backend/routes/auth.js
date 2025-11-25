@@ -8,7 +8,8 @@ const auth = require('../middleware/auth');
 router.post('/login', authController.login);
 router.post('/register', authController.register);
 
-// Protected route
+// Protected routes
 router.get('/me', auth, authController.getMe);
+router.post('/logout', auth, authController.logout); // Добавить этот маршрут
 
 module.exports = router;

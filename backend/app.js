@@ -18,8 +18,9 @@ app.use((req, res, next) => {
 
 // Public routes
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/topics', require('./routes/topics')); // ДОБАВЬТЕ ЭТУ СТРОКУ
-app.use('/api/comments', require('./routes/comments')); // ДОБАВЬТЕ ЭТУ СТРОКУ
+app.use('/api/topics', require('./routes/topics'));
+app.use('/api/comments', require('./routes/comments'));
+app.use('/api/reports', require('./routes/reports')); // ДОБАВИТЬ ЭТУ СТРОКУ
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -53,4 +54,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET  /api/topics/:id`);
   console.log(`   GET  /api/comments/:topicId`);
   console.log(`   POST /api/comments/:topicId`);
+  console.log(`   POST /api/reports`); // ДОБАВИТЬ ЭТУ СТРОКУ
 });

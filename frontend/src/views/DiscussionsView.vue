@@ -78,7 +78,6 @@
     <div class="discussions-list">
       <div v-if="discussionsStore.loading" class="loading">Загрузка обсуждений...</div>
       
-      <!-- ИСПРАВЛЕННАЯ СТРОКА - добавлена проверка на существование filteredDiscussions -->
       <div v-else-if="!filteredDiscussions || filteredDiscussions.length === 0" class="no-discussions">
         <p>Обсуждений не найдено</p>
         <button 
@@ -90,7 +89,6 @@
         </button>
       </div>
 
-      <!-- ИСПРАВЛЕННАЯ СТРОКА - добавлена проверка на существование filteredDiscussions -->
       <div v-else-if="filteredDiscussions && filteredDiscussions.length > 0" class="discussion-cards">
         <div 
           v-for="discussion in filteredDiscussions" 
@@ -120,6 +118,16 @@
               <span class="views">👁️ {{ discussion.views || 0 }}</span>
             </div>
           </div>
+
+          <!-- Кнопки действий для обсуждения -->
+          <div class="discussion-actions" v-if="canModifyDiscussion(discussion)">
+            <button @click.stop="editDiscussion(discussion)" class="edit-btn">
+              ✏️ Редактировать
+            </button>
+            <button @click.stop="deleteDiscussion(discussion.id)" class="delete-btn">
+              🗑️ Удалить
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -144,7 +152,6 @@ const newDiscussion = ref({
   tagsInput: ''
 });
 
-// ИСПРАВЛЕННОЕ computed свойство - добавлена защита
 const filteredDiscussions = computed(() => {
   if (!discussionsStore.discussions) return [];
   
@@ -162,7 +169,6 @@ const filteredDiscussions = computed(() => {
   );
 });
 
-// ИСПРАВЛЕННЫЙ КОД - ТОЛЬКО fetchDiscussions
 onMounted(async () => {
   await discussionsStore.fetchDiscussions();
 });
@@ -258,10 +264,57 @@ const cancelCreate = () => {
 const handleSearch = () => {
   // Поиск уже реализован в computed свойстве
 };
+
+// Функции для редактирования и удаления обсуждений
+const canModifyDiscussion = (discussion) => {
+  const currentUser = getCurrentUser();
+  if (!currentUser) return false;
+  
+  // Автор всегда может редактировать свой контент
+  if (discussionsStore.isCurrentUserAuthor(discussion)) return true;
+  
+  // Админы и модераторы могут редактировать любой контент
+  if (currentUser.role === 'admin' || currentUser.role === 'moderator') return true;
+  
+  return false;
+};
+
+const getCurrentUser = () => {
+  try {
+    const userData = localStorage.getItem('user');
+    return userData ? JSON.parse(userData) : null;
+  } catch {
+    return null;
+  }
+};
+
+const editDiscussion = (discussion) => {
+  const newTitle = prompt('Редактировать заголовок:', discussion.title);
+  const newContent = prompt('Редактировать содержание:', discussion.content);
+  
+  if (newTitle && newContent && (newTitle !== discussion.title || newContent !== discussion.content)) {
+    discussionsStore.updateDiscussion(discussion.id, {
+      title: newTitle.trim(),
+      content: newContent.trim(),
+      tags: discussion.tags
+    });
+  }
+};
+
+const deleteDiscussion = async (discussionId) => {
+  if (confirm('Вы уверены, что хотите удалить это обсуждение?')) {
+    try {
+      await discussionsStore.deleteDiscussion(discussionId);
+      alert('Обсуждение успешно удалено');
+    } catch (error) {
+      console.error('Ошибка при удалении обсуждения:', error);
+      alert('Ошибка при удалении обсуждения');
+    }
+  }
+};
 </script>
 
 <style scoped>
-/* Стили остаются без изменений */
 .discussions-view {
   max-width: 1200px;
   margin: 0 auto;
@@ -401,6 +454,7 @@ const handleSearch = () => {
   cursor: pointer;
   transition: transform 0.3s, box-shadow 0.3s;
   border-left: 4px solid #e10600;
+  position: relative;
 }
 
 .discussion-card:hover {
@@ -471,6 +525,42 @@ const handleSearch = () => {
   background: #f0f0f0;
 }
 
+/* Стили для кнопок действий обсуждения */
+.discussion-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edit-btn, .delete-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.edit-btn {
+  background: #007bff;
+  color: white;
+}
+
+.delete-btn {
+  background: #dc3545;
+  color: white;
+}
+
+.edit-btn:hover {
+  background: #0056b3;
+}
+
+.delete-btn:hover {
+  background: #c82333;
+}
+
 .loading {
   text-align: center;
   padding: 3rem;
@@ -511,6 +601,12 @@ const handleSearch = () => {
     flex-direction: column;
     gap: 1rem;
     align-items: flex-start;
+  }
+
+  .discussion-actions {
+    position: static;
+    margin-top: 1rem;
+    justify-content: flex-end;
   }
 }
 </style>

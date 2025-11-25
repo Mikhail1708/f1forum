@@ -6,7 +6,7 @@ const adminRoutes = require('./admin');
 // Импортируем контроллеры
 const { register, login, getProfile } = require('../controllers/authController');
 const { getNextGrandPrix, getUpcomingEvents, getAllGrandPrix } = require('../controllers/grandPrixController');
-
+const reportRoutes = require('./reports');
 // Аутентификация
 
 router.post('/register', authController.register);
@@ -17,7 +17,7 @@ router.use('/admin', adminRoutes);
 router.get('/grand-prix/next', getNextGrandPrix);
 router.get('/grand-prix/upcoming', getUpcomingEvents);
 router.get('/grand-prix/all', getAllGrandPrix);
-
+router.use('/api/reports', reportRoutes);
 
 // Тестовый маршрут
 router.get('/test', (req, res) => {

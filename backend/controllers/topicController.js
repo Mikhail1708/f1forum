@@ -246,90 +246,98 @@ const topicController = {
         }
     },
 
-    // Обновить тему
-    async updateTopic(req, res) {
-        try {
-            const { id } = req.params;
-            const { title, content, tags } = req.body;
-            const user_id = req.userId;
 
-            console.log('📝 Updating topic:', id);
+// Обновить тему
+async updateTopic(req, res) {
+    try {
+        const { id } = req.params;
+        const { title, content, tags } = req.body;
+        const user_id = req.userId;
 
-            const existingTopic = await db.query(
-                'SELECT user_id FROM topics WHERE id = $1',
-                [id]
-            );
+        console.log('📝 Updating topic:', id);
 
-            if (existingTopic.rows.length === 0) {
-                return res.status(404).json({ 
-                    success: false, 
-                    error: 'Topic not found' 
-                });
-            }
+        const existingTopic = await db.query(
+            'SELECT user_id, status FROM topics WHERE id = $1',
+            [id]
+        );
 
-            if (existingTopic.rows[0].user_id !== user_id && req.user.role !== 'admin') {
-                return res.status(403).json({ 
-                    success: false, 
-                    error: 'Not authorized to update this topic' 
-                });
-            }
-
-            const result = await db.query(`
-                UPDATE topics 
-                SET title = $1, content = $2, tags = $3, updated_at = NOW(), status = 'pending'
-                WHERE id = $4
-                RETURNING *
-            `, [title, content, JSON.stringify(tags || []), id]);
-
-            res.json({
-                success: true,
-                topic: result.rows[0],
-                message: 'Topic updated successfully and sent for moderation'
+        if (existingTopic.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Topic not found' 
             });
-        } catch (error) {
-            console.error('❌ Update topic error:', error);
-            res.status(500).json({ success: false, error: error.message });
         }
-    },
 
-    // Удалить тему
-    async deleteTopic(req, res) {
-        try {
-            const { id } = req.params;
-            const user_id = req.userId;
-
-            console.log('📝 Deleting topic:', id);
-
-            const existingTopic = await db.query(
-                'SELECT user_id FROM topics WHERE id = $1',
-                [id]
-            );
-
-            if (existingTopic.rows.length === 0) {
-                return res.status(404).json({ 
-                    success: false, 
-                    error: 'Topic not found' 
-                });
-            }
-
-            if (existingTopic.rows[0].user_id !== user_id && req.user.role !== 'admin') {
-                return res.status(403).json({ 
-                    success: false, 
-                    error: 'Not authorized to delete this topic' 
-                });
-            }
-
-            await db.query('DELETE FROM topics WHERE id = $1', [id]);
-
-            res.json({
-                success: true,
-                message: 'Topic deleted successfully'
+        const topic = existingTopic.rows[0];
+        
+        // Проверяем авторство ИЛИ права администратора/модератора
+        if (topic.user_id !== user_id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+            return res.status(403).json({ 
+                success: false, 
+                error: 'Not authorized to update this topic' 
             });
-        } catch (error) {
-            console.error('❌ Delete topic error:', error);
-            res.status(500).json({ success: false, error: error.message });
         }
-    },
+
+        const result = await db.query(`
+            UPDATE topics 
+            SET title = $1, content = $2, tags = $3, updated_at = NOW(), status = 'pending'
+            WHERE id = $4
+            RETURNING *
+        `, [title, content, JSON.stringify(tags || []), id]);
+
+        res.json({
+            success: true,
+            topic: result.rows[0],
+            message: 'Topic updated successfully and sent for moderation'
+        });
+    } catch (error) {
+        console.error('❌ Update topic error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+},
+
+// Удалить тему
+async deleteTopic(req, res) {
+    try {
+        const { id } = req.params;
+        const user_id = req.userId;
+
+        console.log('📝 Deleting topic:', id);
+
+        const existingTopic = await db.query(
+            'SELECT user_id FROM topics WHERE id = $1',
+            [id]
+        );
+
+        if (existingTopic.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Topic not found' 
+            });
+        }
+
+        const topic = existingTopic.rows[0];
+        
+        // Проверяем авторство ИЛИ права администратора/модератора
+        if (topic.user_id !== user_id && req.user.role !== 'admin' && req.user.role !== 'moderator') {
+            return res.status(403).json({ 
+                success: false, 
+                error: 'Not authorized to delete this topic' 
+            });
+        }
+
+        await db.query('DELETE FROM topics WHERE id = $1', [id]);
+
+        res.json({
+            success: true,
+            message: 'Topic deleted successfully'
+        });
+    } catch (error) {
+        console.error('❌ Delete topic error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+},
+    
 
     // Увеличить счетчик просмотров
     async incrementViews(req, res) {

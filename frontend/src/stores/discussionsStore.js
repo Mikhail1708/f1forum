@@ -82,7 +82,6 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Остальные методы остаются без изменений...
   const createDiscussion = async (discussionData) => {
     try {
       console.log('🔄 Creating discussion:', discussionData);
@@ -123,7 +122,10 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     try {
       console.log('🔄 Deleting discussion:', discussionId);
       await api.delete(`/topics/${discussionId}`);
-      await fetchDiscussions();
+      
+      // Удаляем из локального списка
+      discussions.value = discussions.value.filter(d => d.id !== discussionId);
+      
       console.log('✅ Discussion deleted');
     } catch (err) {
       console.error('❌ Delete discussion error:', err);
@@ -165,7 +167,10 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     try {
       console.log('🔄 Deleting comment:', commentId);
       await api.delete(`/comments/${commentId}`);
-      await fetchDiscussion(currentDiscussion.value?.id);
+      
+      // Удаляем локально для мгновенного обновления UI
+      removeCommentLocally(commentId);
+      
       console.log('✅ Comment deleted');
     } catch (err) {
       console.error('❌ Delete comment error:', err);
@@ -221,14 +226,57 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     return userData ? JSON.parse(userData) : { username: 'Anonymous', id: null };
   };
 
+  // УПРОЩЕННАЯ И ИСПРАВЛЕННАЯ функция проверки авторства
   const isCurrentUserAuthor = (item) => {
-    const currentUser = getCurrentUser();
-    return item.author?.id === currentUser.id || item.user_id === currentUser.id;
+    try {
+      console.log('🔍 Проверка авторства для:', item);
+      
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        console.log('❌ Нет данных пользователя');
+        return false;
+      }
+      
+      const currentUser = JSON.parse(userData);
+      console.log('👤 Текущий пользователь:', currentUser);
+      
+      // ВАРИАНТ 1: Проверяем через author.id (новый формат)
+      if (item.author && item.author.id) {
+        console.log('📝 Проверка через author.id:', item.author.id);
+        const result = item.author.id === currentUser.id;
+        console.log('✅ Результат:', result);
+        return result;
+      }
+      
+      // ВАРИАНТ 2: Проверяем через user_id (старый формат)
+      if (item.user_id) {
+        console.log('📝 Проверка через user_id:', item.user_id);
+        const result = item.user_id === currentUser.id;
+        console.log('✅ Результат:', result);
+        return result;
+      }
+      
+      // ВАРИАНТ 3: Проверяем через author_id (если есть)
+      if (item.author_id) {
+        console.log('📝 Проверка через author_id:', item.author_id);
+        const result = item.author_id === currentUser.id;
+        console.log('✅ Результат:', result);
+        return result;
+      }
+      
+      console.log('❌ Не найдено поле для проверки авторства');
+      return false;
+      
+    } catch (error) {
+      console.error('❌ Ошибка проверки авторства:', error);
+      return false;
+    }
   };
 
   const removeCommentLocally = (commentId) => {
     if (!currentDiscussion.value?.comments) return;
     
+    // Ищем в основных комментариях
     const commentIndex = currentDiscussion.value.comments.findIndex(
       comment => comment.id === commentId
     );
@@ -238,6 +286,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
       return;
     }
     
+    // Ищем в ответах
     currentDiscussion.value.comments.forEach(comment => {
       if (comment.replies) {
         const replyIndex = comment.replies.findIndex(reply => reply.id === commentId);
