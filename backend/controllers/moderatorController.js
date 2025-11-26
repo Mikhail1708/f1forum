@@ -657,159 +657,261 @@ const moderatorController = {
         }
     },
 
-    // Обработать жалобу (расширенная версия)
-    async resolveReport(req, res) {
-        try {
-            const { reportId } = req.params;
-            const { action, moderator_notes } = req.body;
-            const moderator_id = req.userId;
+    // moderatorController.js - исправленная функция
+async updateReportResolution(req, res) {
+    try {
+        const { reportId } = req.params;
+        const { status, resolution, moderator_notes } = req.body;
+        const moderator_id = req.userId;
 
-            console.log('🔧 Resolving report:', { reportId, action, moderator_id });
+        console.log('🔄 Updating report resolution:', { reportId, status, resolution });
 
-            const report = await db.query(
-                'SELECT * FROM reports WHERE id = $1',
-                [reportId]
-            );
+        const report = await db.query(
+            'SELECT * FROM reports WHERE id = $1',
+            [reportId]
+        );
 
-            if (report.rows.length === 0) {
-                return res.status(404).json({ 
-                    success: false, 
-                    error: 'Жалоба не найдена' 
-                });
-            }
-
-            const reportData = report.rows[0];
-            
-            if (reportData.status === 'resolved') {
-                return res.status(400).json({ 
-                    success: false, 
-                    error: 'Жалоба уже обработана' 
-                });
-            }
-
-            let resolution = '';
-            let actionDescription = '';
-
-            // Выполняем действие
-            if (action === 'remove_content') {
-                if (reportData.content_type === 'topic') {
-                    await db.query('DELETE FROM topics WHERE id = $1', [reportData.content_id]);
-                    resolution = 'Контент удален: обсуждение';
-                    actionDescription = 'Удалено обсуждение';
-                } else if (reportData.content_type === 'comment') {
-                    await db.query('DELETE FROM comments WHERE id = $1', [reportData.content_id]);
-                    resolution = 'Контент удален: комментарий';
-                    actionDescription = 'Удален комментарий';
-                }
-            } else if (action === 'dismiss') {
-                resolution = 'Жалоба отклонена - нарушений не обнаружено';
-                actionDescription = 'Жалоба отклонена';
-            } else if (action === 'warn_user') {
-                resolution = 'Пользователю выдано предупреждение';
-                actionDescription = 'Выдано предупреждение пользователю';
-                
-                // Добавляем предупреждение пользователю
-                await db.query(`
-                    INSERT INTO user_warnings (user_id, moderator_id, reason)
-                    VALUES ($1, $2, $3)
-                `, [reportData.author_id, moderator_id, `Жалоба #${reportId}: ${moderator_notes || 'Нарушение правил сообщества'}`]);
-            } else {
-                return res.status(400).json({ 
-                    success: false, 
-                    error: 'Неверное действие' 
-                });
-            }
-
-            // Обновляем жалобу
-            await db.query(`
-                UPDATE reports 
-                SET status = 'resolved', 
-                    resolution = $1,
-                    moderator_id = $2,
-                    moderator_notes = $3,
-                    resolved_at = NOW()
-                WHERE id = $4
-            `, [resolution, moderator_id, moderator_notes, reportId]);
-
-            // Логируем действие
-            await db.query(`
-                INSERT INTO moderator_actions (moderator_id, action_type, description)
-                VALUES ($1, $2, $3)
-            `, [moderator_id, 'report_resolved', `Обработана жалоба #${reportId}: ${actionDescription}`]);
-
-            // Если есть moderator_notes, добавляем их как комментарий
-            if (moderator_notes && moderator_notes.trim()) {
-                await db.query(`
-                    INSERT INTO report_notes (report_id, moderator_id, note)
-                    VALUES ($1, $2, $3)
-                `, [reportId, moderator_id, `Решение модератора: ${moderator_notes.trim()}`]);
-            }
-
-            console.log('✅ Report resolved:', reportId);
-
-            res.json({
-                success: true,
-                message: 'Жалоба успешно обработана',
-                resolution: resolution
+        if (report.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Жалоба не найдена' 
             });
-        } catch (error) {
-            console.error('❌ Resolve report error:', error);
-            res.status(500).json({ success: false, error: error.message });
         }
-    },
 
-    // Изменить решение по жалобе (переоткрыть или изменить статус)
-    async updateReportResolution(req, res) {
-        try {
-            const { reportId } = req.params;
-            const { status, resolution, moderator_notes } = req.body;
-            const moderator_id = req.userId;
+        // ИСПРАВЛЕНИЕ: явно указываем типы параметров
+        await db.query(`
+            UPDATE reports 
+            SET status = $1::text,
+                resolution = $2::text,
+                moderator_notes = $3::text,
+                moderator_id = $4,
+                resolved_at = CASE 
+                    WHEN $1::text = 'pending' THEN NULL 
+                    ELSE COALESCE(resolved_at, NOW()) 
+                END
+            WHERE id = $5
+        `, [status, resolution, moderator_notes, moderator_id, reportId]);
 
-            const report = await db.query(
-                'SELECT * FROM reports WHERE id = $1',
-                [reportId]
-            );
+        // Логируем изменение
+        const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
+        const description = status === 'pending' 
+            ? `Переоткрыта жалоба #${reportId}` 
+            : `Обновлено решение по жалобе #${reportId}`;
 
-            if (report.rows.length === 0) {
-                return res.status(404).json({ 
+        await db.query(`
+            INSERT INTO moderator_actions (moderator_id, action_type, description)
+            VALUES ($1, $2, $3)
+        `, [moderator_id, actionType, description]);
+
+        res.json({
+            success: true,
+            message: 'Решение по жалобе обновлено'
+        });
+    } catch (error) {
+        console.error('❌ Update report resolution error:', error);
+        
+        // Альтернативная попытка без явного приведения типов
+        if (error.message.includes('inconsistent types')) {
+            try {
+                console.log('🔄 Retrying without type casting...');
+                
+                const { reportId } = req.params;
+                const { status, resolution, moderator_notes } = req.body;
+                const moderator_id = req.userId;
+
+                const report = await db.query(
+                    'SELECT * FROM reports WHERE id = $1',
+                    [reportId]
+                );
+
+                if (report.rows.length === 0) {
+                    return res.status(404).json({ 
+                        success: false, 
+                        error: 'Жалоба не найдена' 
+                    });
+                }
+
+                // Простая версия без приведения типов
+                await db.query(`
+                    UPDATE reports 
+                    SET status = $1,
+                        resolution = $2,
+                        moderator_notes = $3,
+                        moderator_id = $4,
+                        resolved_at = CASE 
+                            WHEN $1 = 'pending' THEN NULL 
+                            ELSE COALESCE(resolved_at, NOW()) 
+                        END
+                    WHERE id = $5
+                `, [status, resolution, moderator_notes, moderator_id, reportId]);
+
+                // Логируем изменение
+                const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
+                const description = status === 'pending' 
+                    ? `Переоткрыта жалоба #${reportId}` 
+                    : `Обновлено решение по жалобе #${reportId}`;
+
+                await db.query(`
+                    INSERT INTO moderator_actions (moderator_id, action_type, description)
+                    VALUES ($1, $2, $3)
+                `, [moderator_id, actionType, description]);
+
+                res.json({
+                    success: true,
+                    message: 'Решение по жалобе обновлено'
+                });
+                
+            } catch (retryError) {
+                console.error('❌ Retry also failed:', retryError);
+                res.status(500).json({ 
                     success: false, 
-                    error: 'Жалоба не найдена' 
+                    error: 'Ошибка базы данных: ' + retryError.message 
                 });
             }
-
-            await db.query(`
-                UPDATE reports 
-                SET status = $1,
-                    resolution = $2,
-                    moderator_notes = $3,
-                    moderator_id = $4,
-                    resolved_at = CASE 
-                        WHEN $1 = 'pending' THEN NULL 
-                        ELSE COALESCE(resolved_at, NOW()) 
-                    END
-                WHERE id = $5
-            `, [status, resolution, moderator_notes, moderator_id, reportId]);
-
-            // Логируем изменение
-            const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
-            const description = status === 'pending' 
-                ? `Переоткрыта жалоба #${reportId}` 
-                : `Обновлено решение по жалобе #${reportId}`;
-
-            await db.query(`
-                INSERT INTO moderator_actions (moderator_id, action_type, description)
-                VALUES ($1, $2, $3)
-            `, [moderator_id, actionType, description]);
-
-            res.json({
-                success: true,
-                message: 'Решение по жалобе обновлено'
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                error: 'Внутренняя ошибка сервера: ' + error.message 
             });
-        } catch (error) {
-            console.error('❌ Update report resolution error:', error);
-            res.status(500).json({ success: false, error: error.message });
         }
     }
-};
+},
+    
+// moderatorController.js - ДОБАВЛЯЕМ В КОНЕЦ ФАЙЛА
 
+// Функция для обработки жалоб (альтернатива из reportController)
+async resolveReport(req, res) {
+    try {
+        const { reportId } = req.params;
+        const { action, moderator_notes } = req.body;
+        const moderator_id = req.userId;
+
+        console.log('🔧 Resolving report:', { reportId, action, moderator_id });
+
+        const report = await db.query(
+            'SELECT * FROM reports WHERE id = $1',
+            [reportId]
+        );
+
+        if (report.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Жалоба не найдена' 
+            });
+        }
+
+        const reportData = report.rows[0];
+        let resolution = '';
+
+        if (action === 'remove_content') {
+            // Удаляем контент
+            if (reportData.content_type === 'topic') {
+                await db.query('DELETE FROM topics WHERE id = $1', [reportData.content_id]);
+                resolution = 'Обсуждение удалено';
+            } else if (reportData.content_type === 'comment') {
+                await db.query('DELETE FROM comments WHERE id = $1', [reportData.content_id]);
+                resolution = 'Комментарий удален';
+            }
+        } else if (action === 'dismiss') {
+            resolution = 'Жалоба отклонена - нарушений не обнаружено';
+        } else if (action === 'warn_user') {
+            resolution = 'Пользователю выдано предупреждение';
+            // Добавляем предупреждение пользователю
+            await db.query(`
+                INSERT INTO user_warnings (user_id, moderator_id, reason)
+                VALUES ($1, $2, $3)
+            `, [reportData.author_id, moderator_id, `Жалоба #${reportId}: ${moderator_notes || 'Нарушение правил'}`]);
+        } else {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Неверное действие' 
+            });
+        }
+
+        // Обновляем жалобу
+        await db.query(`
+            UPDATE reports 
+            SET status = 'resolved', 
+                resolution = $1,
+                moderator_id = $2,
+                moderator_notes = $3,
+                resolved_at = NOW()
+            WHERE id = $4
+        `, [resolution, moderator_id, moderator_notes || null, reportId]);
+
+        console.log('✅ Report resolved:', reportId);
+
+        res.json({
+            success: true,
+            message: 'Жалоба обработана успешно'
+        });
+    } catch (error) {
+        console.error('❌ Resolve report error:', error);
+        
+        // Если ошибка из-за отсутствия колонки moderator_notes
+        if (error.message.includes('moderator_notes')) {
+            try {
+                console.log('🔄 Retrying without moderator_notes...');
+                
+                const { reportId } = req.params;
+                const { action } = req.body;
+                const moderator_id = req.userId;
+
+                const report = await db.query(
+                    'SELECT * FROM reports WHERE id = $1',
+                    [reportId]
+                );
+
+                if (report.rows.length === 0) {
+                    return res.status(404).json({ 
+                        success: false, 
+                        error: 'Жалоба не найдена' 
+                    });
+                }
+
+                const reportData = report.rows[0];
+                let resolution = '';
+
+                if (action === 'remove_content') {
+                    if (reportData.content_type === 'topic') {
+                        await db.query('DELETE FROM topics WHERE id = $1', [reportData.content_id]);
+                        resolution = 'Обсуждение удалено';
+                    } else if (reportData.content_type === 'comment') {
+                        await db.query('DELETE FROM comments WHERE id = $1', [reportData.content_id]);
+                        resolution = 'Комментарий удален';
+                    }
+                } else if (action === 'dismiss') {
+                    resolution = 'Жалоба отклонена';
+                }
+
+                await db.query(`
+                    UPDATE reports 
+                    SET status = 'resolved', 
+                        resolution = $1,
+                        moderator_id = $2,
+                        resolved_at = NOW()
+                    WHERE id = $3
+                `, [resolution, moderator_id, reportId]);
+
+                res.json({
+                    success: true,
+                    message: 'Жалоба обработана успешно (без заметок)'
+                });
+                
+            } catch (retryError) {
+                console.error('❌ Retry also failed:', retryError);
+                res.status(500).json({ 
+                    success: false, 
+                    error: 'Ошибка базы данных: ' + retryError.message 
+                });
+            }
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                error: 'Внутренняя ошибка сервера: ' + error.message 
+            });
+        }
+    }
+}
+}
 module.exports = moderatorController;

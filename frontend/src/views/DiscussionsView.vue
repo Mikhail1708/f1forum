@@ -119,15 +119,8 @@
             </div>
           </div>
 
-          <!-- Кнопки действий для обсуждения -->
-          <div class="discussion-actions" v-if="canModifyDiscussion(discussion)">
-            <button @click.stop="editDiscussion(discussion)" class="edit-btn">
-              ✏️ Редактировать
-            </button>
-            <button @click.stop="deleteDiscussion(discussion.id)" class="delete-btn">
-              🗑️ Удалить
-            </button>
-          </div>
+          
+          
         </div>
       </div>
     </div>
@@ -168,6 +161,12 @@ const filteredDiscussions = computed(() => {
     ))
   );
 });
+
+// Проверка авторства обсуждения
+const isDiscussionAuthor = (discussion) => {
+  const user = authStore.user;
+  return discussion.author?.id === user?.id;
+};
 
 onMounted(async () => {
   await discussionsStore.fetchDiscussions();
@@ -265,29 +264,6 @@ const handleSearch = () => {
   // Поиск уже реализован в computed свойстве
 };
 
-// Функции для редактирования и удаления обсуждений
-const canModifyDiscussion = (discussion) => {
-  const currentUser = getCurrentUser();
-  if (!currentUser) return false;
-  
-  // Автор всегда может редактировать свой контент
-  if (discussionsStore.isCurrentUserAuthor(discussion)) return true;
-  
-  // Админы и модераторы могут редактировать любой контент
-  if (currentUser.role === 'admin' || currentUser.role === 'moderator') return true;
-  
-  return false;
-};
-
-const getCurrentUser = () => {
-  try {
-    const userData = localStorage.getItem('user');
-    return userData ? JSON.parse(userData) : null;
-  } catch {
-    return null;
-  }
-};
-
 const editDiscussion = (discussion) => {
   const newTitle = prompt('Редактировать заголовок:', discussion.title);
   const newContent = prompt('Редактировать содержание:', discussion.content);
@@ -315,6 +291,7 @@ const deleteDiscussion = async (discussionId) => {
 </script>
 
 <style scoped>
+/* Стили остаются как были */
 .discussions-view {
   max-width: 1200px;
   margin: 0 auto;

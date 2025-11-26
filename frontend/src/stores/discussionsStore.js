@@ -1,4 +1,3 @@
-// frontend/src/stores/discussionsStore.js
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import api from '../services/api';
@@ -9,29 +8,48 @@ export const useDiscussionsStore = defineStore('discussions', () => {
   const loading = ref(false);
   const error = ref(null);
 
-  // Загрузка всех обсуждений - ИСПРАВЛЕННАЯ
+  // ПРОСТАЯ ПРОВЕРКА АВТОРСТВА
+  const isCurrentUserAuthor = (item) => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return false;
+      
+      const currentUser = JSON.parse(userData);
+      
+      console.log('🔍 ПРОВЕРКА АВТОРСТВА:', {
+        itemType: item.title ? 'discussion' : 'comment',
+        itemAuthor: item.author,
+        currentUser: currentUser,
+        authorId: item.author?.id,
+        userId: currentUser.id,
+        isEqual: item.author?.id === currentUser.id
+      });
+      
+      return item.author?.id === currentUser.id;
+    } catch (error) {
+      console.error('❌ Ошибка проверки авторства:', error);
+      return false;
+    }
+  };
+
+  // Загрузка всех обсуждений
   const fetchDiscussions = async () => {
     loading.value = true;
     error.value = null;
     try {
       console.log('🔄 Fetching discussions...');
       const response = await api.get('/topics');
-      
-      // ИСПРАВЛЕНИЕ: правильное извлечение данных
-      discussions.value = response.data.topics || [];
+      discussions.value = response.data.topics || response.data;
       console.log('✅ Discussions loaded:', discussions.value.length);
-      console.log('📊 First discussion:', discussions.value[0]);
-      
     } catch (err) {
       console.error('❌ Fetch discussions error:', err);
       error.value = err.response?.data?.error || 'Ошибка загрузки обсуждений';
-      discussions.value = [];
     } finally {
       loading.value = false;
     }
   };
 
-  // Загрузка одного обсуждения - ИСПРАВЛЕННАЯ
+  // Загрузка одного обсуждения
   const fetchDiscussion = async (id) => {
     if (!id) return;
     
@@ -40,11 +58,8 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     try {
       console.log('🔄 Fetching discussion:', id);
       const response = await api.get(`/topics/${id}`);
-      
-      // ИСПРАВЛЕНИЕ: правильное извлечение данных
       currentDiscussion.value = response.data.topic || response.data;
       console.log('✅ Discussion loaded:', currentDiscussion.value);
-      
     } catch (err) {
       console.error('❌ Fetch discussion error:', err);
       error.value = err.response?.data?.error || 'Ошибка загрузки обсуждения';
@@ -53,7 +68,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  // Лайк обсуждения - ИСПРАВЛЕННАЯ
+  // Лайк обсуждения
   const likeDiscussion = async (discussionId) => {
     try {
       console.log('🔄 Liking discussion:', discussionId);
@@ -82,6 +97,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Создание обсуждения
   const createDiscussion = async (discussionData) => {
     try {
       console.log('🔄 Creating discussion:', discussionData);
@@ -95,6 +111,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Обновление обсуждения
   const updateDiscussion = async (discussionId, discussionData) => {
     try {
       console.log('🔄 Updating discussion:', discussionId, discussionData);
@@ -118,6 +135,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Удаление обсуждения
   const deleteDiscussion = async (discussionId) => {
     try {
       console.log('🔄 Deleting discussion:', discussionId);
@@ -134,6 +152,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Добавление комментария
   const addComment = async (discussionId, commentData) => {
     try {
       console.log('🔄 Adding comment:', { discussionId, commentData });
@@ -150,6 +169,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Обновление комментария
   const updateComment = async (commentId, commentData) => {
     try {
       console.log('🔄 Updating comment:', commentId, commentData);
@@ -163,6 +183,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Удаление комментария
   const deleteComment = async (commentId) => {
     try {
       console.log('🔄 Deleting comment:', commentId);
@@ -179,6 +200,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Добавление ответа
   const addReply = async (commentId, replyData) => {
     try {
       console.log('🔄 Adding reply:', { commentId, replyData });
@@ -208,6 +230,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
+  // Лайк комментария
   const likeComment = async (commentId) => {
     try {
       console.log('🔄 Liking comment:', commentId);
@@ -221,60 +244,11 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     }
   };
 
-  const getCurrentUser = () => {
-    const userData = localStorage.getItem('user');
-    return userData ? JSON.parse(userData) : { username: 'Anonymous', id: null };
-  };
-
-  // УПРОЩЕННАЯ И ИСПРАВЛЕННАЯ функция проверки авторства
-  const isCurrentUserAuthor = (item) => {
-    try {
-      console.log('🔍 Проверка авторства для:', item);
-      
-      const userData = localStorage.getItem('user');
-      if (!userData) {
-        console.log('❌ Нет данных пользователя');
-        return false;
-      }
-      
-      const currentUser = JSON.parse(userData);
-      console.log('👤 Текущий пользователь:', currentUser);
-      
-      // ВАРИАНТ 1: Проверяем через author.id (новый формат)
-      if (item.author && item.author.id) {
-        console.log('📝 Проверка через author.id:', item.author.id);
-        const result = item.author.id === currentUser.id;
-        console.log('✅ Результат:', result);
-        return result;
-      }
-      
-      // ВАРИАНТ 2: Проверяем через user_id (старый формат)
-      if (item.user_id) {
-        console.log('📝 Проверка через user_id:', item.user_id);
-        const result = item.user_id === currentUser.id;
-        console.log('✅ Результат:', result);
-        return result;
-      }
-      
-      // ВАРИАНТ 3: Проверяем через author_id (если есть)
-      if (item.author_id) {
-        console.log('📝 Проверка через author_id:', item.author_id);
-        const result = item.author_id === currentUser.id;
-        console.log('✅ Результат:', result);
-        return result;
-      }
-      
-      console.log('❌ Не найдено поле для проверки авторства');
-      return false;
-      
-    } catch (error) {
-      console.error('❌ Ошибка проверки авторства:', error);
-      return false;
-    }
-  };
-
+  // Вспомогательная функция для локального удаления комментария
   const removeCommentLocally = (commentId) => {
     if (!currentDiscussion.value?.comments) return;
+    
+    console.log('🔄 Removing comment locally:', commentId);
     
     // Ищем в основных комментариях
     const commentIndex = currentDiscussion.value.comments.findIndex(
@@ -283,6 +257,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
     
     if (commentIndex !== -1) {
       currentDiscussion.value.comments.splice(commentIndex, 1);
+      console.log('✅ Comment removed locally from main comments');
       return;
     }
     
@@ -292,6 +267,7 @@ export const useDiscussionsStore = defineStore('discussions', () => {
         const replyIndex = comment.replies.findIndex(reply => reply.id === commentId);
         if (replyIndex !== -1) {
           comment.replies.splice(replyIndex, 1);
+          console.log('✅ Comment removed locally from replies');
         }
       }
     });

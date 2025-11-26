@@ -133,7 +133,7 @@ const reportController = {
         }
     },
 
-    // Обработать жалобу
+    // Обработать жалобу - ИСПРАВЛЕННАЯ ВЕРСИЯ
     async resolveReport(req, res) {
         try {
             const { id } = req.params;
@@ -157,6 +157,7 @@ const reportController = {
             const reportData = report.rows[0];
             let resolution = '';
 
+            // ИСПРАВЛЕНИЕ: используем правильные названия полей из базы
             if (action === 'remove_content') {
                 // Удаляем контент
                 if (reportData.content_type === 'topic') {
@@ -182,6 +183,7 @@ const reportController = {
                 });
             }
 
+            // ИСПРАВЛЕНИЕ: используем правильные названия полей
             await db.query(`
                 UPDATE reports 
                 SET status = 'resolved', 
@@ -190,7 +192,7 @@ const reportController = {
                     moderator_notes = $3,
                     resolved_at = NOW()
                 WHERE id = $4
-            `, [resolution, moderator_id, moderator_notes, id]);
+            `, [resolution, moderator_id, moderator_notes || null, id]);
 
             console.log('✅ Report resolved:', id);
 
@@ -200,7 +202,70 @@ const reportController = {
             });
         } catch (error) {
             console.error('❌ Resolve report error:', error);
-            res.status(500).json({ success: false, error: error.message });
+            
+            // Если ошибка из-за отсутствия колонки moderator_notes
+            if (error.message.includes('moderator_notes')) {
+                try {
+                    console.log('🔄 Retrying without moderator_notes...');
+                    
+                    const { id } = req.params;
+                    const { action } = req.body;
+                    const moderator_id = req.userId;
+
+                    const report = await db.query(
+                        'SELECT * FROM reports WHERE id = $1',
+                        [id]
+                    );
+
+                    if (report.rows.length === 0) {
+                        return res.status(404).json({ 
+                            success: false, 
+                            error: 'Жалоба не найдена' 
+                        });
+                    }
+
+                    const reportData = report.rows[0];
+                    let resolution = '';
+
+                    if (action === 'remove_content') {
+                        if (reportData.content_type === 'topic') {
+                            await db.query('DELETE FROM topics WHERE id = $1', [reportData.content_id]);
+                            resolution = 'Обсуждение удалено';
+                        } else if (reportData.content_type === 'comment') {
+                            await db.query('DELETE FROM comments WHERE id = $1', [reportData.content_id]);
+                            resolution = 'Комментарий удален';
+                        }
+                    } else if (action === 'dismiss') {
+                        resolution = 'Жалоба отклонена';
+                    }
+
+                    await db.query(`
+                        UPDATE reports 
+                        SET status = 'resolved', 
+                            resolution = $1,
+                            moderator_id = $2,
+                            resolved_at = NOW()
+                        WHERE id = $3
+                    `, [resolution, moderator_id, id]);
+
+                    res.json({
+                        success: true,
+                        message: 'Жалоба обработана успешно (без заметок)'
+                    });
+                    
+                } catch (retryError) {
+                    console.error('❌ Retry also failed:', retryError);
+                    res.status(500).json({ 
+                        success: false, 
+                        error: 'Ошибка базы данных: ' + retryError.message 
+                    });
+                }
+            } else {
+                res.status(500).json({ 
+                    success: false, 
+                    error: 'Внутренняя ошибка сервера: ' + error.message 
+                });
+            }
         }
     }
 };

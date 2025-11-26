@@ -88,9 +88,6 @@
               <button @click="quickResolve(report.id, 'warn_user')" class="btn btn-warning">
                 ⚠️ Предупредить
               </button>
-              <button @click="viewOriginalContent(report)" class="btn btn-info">
-                👁️ Просмотр
-              </button>
             </div>
 
             <!-- Информация о решении -->
@@ -208,14 +205,80 @@ export default {
       }
     }
 
-    const viewOriginalContent = (report) => {
-      if (report.content_type === 'topic') {
-        router.push(`/discussion/${report.content_id}`)
-      } else {
-        // Для комментариев переходим к обсуждению
-        router.push(`/discussion/${report.content_id}`)
+  const viewOriginalContent = async (report) => {
+  console.log('🔍 Viewing original content for report:', report);
+  
+  try {
+    if (report.content_type === 'topic') {
+      // Для темы
+      try {
+        await discussionsStore.fetchDiscussion(report.content_id);
+        
+        if (discussionsStore.currentDiscussion) {
+          router.push(`/discussion/${report.content_id}`);
+        } else {
+          throw new Error('Topic not found');
+        }
+      } catch (error) {
+        console.error('❌ Topic not found:', error);
+        alert('❌ Обсуждение не найдено. Возможно оно было удалено при обработке жалобы.');
+      }
+    } 
+    else if (report.content_type === 'comment') {
+      // Для комментария - используем прямой подход
+      try {
+        // Пробуем загрузить все комментарии темы чтобы найти наш
+        const topicsResponse = await api.get('/topics');
+        const topics = topicsResponse.data.topics || topicsResponse.data;
+        
+        let targetTopicId = null;
+        
+        // Ищем тему которая содержит этот комментарий
+        for (const topic of topics) {
+          try {
+            const topicResponse = await api.get(`/topics/${topic.id}`);
+            const topicData = topicResponse.data.topic || topicResponse.data;
+            
+            if (topicData.comments) {
+              // Проверяем все комментарии и ответы
+              const checkComments = (comments) => {
+                for (const comment of comments) {
+                  if (comment.id == report.content_id) {
+                    return true;
+                  }
+                  if (comment.replies && comment.replies.some(reply => reply.id == report.content_id)) {
+                    return true;
+                  }
+                }
+                return false;
+              };
+              
+              if (checkComments(topicData.comments)) {
+                targetTopicId = topic.id;
+                break;
+              }
+            }
+          } catch (topicError) {
+            console.log(`❌ Could not check topic ${topic.id}:`, topicError.message);
+          }
+        }
+        
+        if (targetTopicId) {
+          await discussionsStore.fetchDiscussion(targetTopicId);
+          router.push(`/discussion/${targetTopicId}?comment=${report.content_id}`);
+        } else {
+          throw new Error('Comment not found in any topic');
+        }
+      } catch (error) {
+        console.error('❌ Error finding comment:', error);
+        alert('❌ Комментарий не найден в системе.');
       }
     }
+  } catch (error) {
+    console.error('❌ Error viewing content:', error);
+    alert('❌ Не удалось открыть контент.');
+  }
+};
 
     // Вспомогательные функции
     const getContentTypeIcon = (type) => {

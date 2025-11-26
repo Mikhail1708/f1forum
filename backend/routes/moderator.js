@@ -30,6 +30,7 @@ router.post('/users/:userId/unsuspend', moderatorController.unsuspendUser);
 router.get('/reports', moderatorController.getReports);
 router.get('/reports/stats', moderatorController.getReportsStats);
 router.get('/reports/:reportId', moderatorController.getReportDetails);
+// ИСПРАВЛЕНИЕ: используем moderatorController вместо reportController
 router.post('/reports/:reportId/resolve', moderatorController.resolveReport);
 router.put('/reports/:reportId/resolution', moderatorController.updateReportResolution);
 router.post('/reports/:reportId/notes', moderatorController.addReportNote);
