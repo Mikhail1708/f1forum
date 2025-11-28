@@ -1,5 +1,8 @@
 // backend/controllers/adminController.js
 const db = require('../db/postgres');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
 
 // Вынесем функцию получения активности отдельно
 async function getRecentActivity() {
@@ -53,6 +56,64 @@ async function getRecentActivity() {
     } catch (error) {
         console.error('❌ Recent activity error:', error);
         return [];
+    }
+}
+
+// Функция для получения логов системы
+async function getSystemLogs(limit = 50) {
+    try {
+        const logsQuery = `
+            SELECT 
+                id,
+                level,
+                message,
+                created_at,
+                user_id,
+                action_type
+            FROM system_logs 
+            ORDER BY created_at DESC 
+            LIMIT $1
+        `;
+
+        const { rows } = await db.query(logsQuery, [limit]);
+        return rows;
+    } catch (error) {
+        console.error('❌ System logs error:', error);
+        return [];
+    }
+}
+
+// Функция для получения подробной статистики
+async function getDetailedStats(startDate, endDate) {
+    try {
+        const statsQuery = `
+            SELECT 
+                -- Статистика пользователей
+                (SELECT COUNT(*) FROM users) as total_users,
+                (SELECT COUNT(*) FROM users WHERE created_at >= $1 AND created_at <= $2) as new_users_period,
+                (SELECT COUNT(*) FROM users WHERE role = 'admin') as admin_count,
+                (SELECT COUNT(*) FROM users WHERE role = 'moderator') as moderator_count,
+                (SELECT COUNT(*) FROM users WHERE status = 'active') as active_users,
+                (SELECT COUNT(*) FROM users WHERE status = 'banned') as banned_users,
+                
+                -- Статистика контента
+                (SELECT COUNT(*) FROM topics) as total_topics,
+                (SELECT COUNT(*) FROM topics WHERE created_at >= $1 AND created_at <= $2) as new_topics_period,
+                (SELECT COUNT(*) FROM comments) as total_comments,
+                (SELECT COUNT(*) FROM comments WHERE created_at >= $1 AND created_at <= $2) as new_comments_period,
+                
+                -- Статистика жалоб
+                (SELECT COUNT(*) FROM reports) as total_reports,
+                (SELECT COUNT(*) FROM reports WHERE created_at >= $1 AND created_at <= $2) as new_reports_period,
+                (SELECT COUNT(*) FROM reports WHERE status = 'resolved') as resolved_reports,
+                (SELECT COUNT(*) FROM reports WHERE status = 'pending') as pending_reports
+        `;
+
+        const { rows } = await db.query(statsQuery, [startDate, endDate]);
+        return rows[0] || {};
+    } catch (error) {
+        console.error('❌ Detailed stats error:', error);
+        return {};
     }
 }
 
@@ -143,6 +204,213 @@ const adminController = {
         }
     },
 
+    // Генерация PDF отчета для админки
+    async generateAdminReportPDF(req, res) {
+        try {
+            const { start_date, end_date, report_type = 'overview' } = req.query;
+            
+            console.log('📊 Generating admin PDF report:', { start_date, end_date, report_type });
+
+            // Получаем данные в зависимости от типа отчета
+            let stats = {};
+            let activity = [];
+            let logs = [];
+            let reportTitle = '';
+
+            switch (report_type) {
+                case 'overview':
+                    stats = await getDetailedStats(start_date, end_date);
+                    activity = await getRecentActivity();
+                    logs = await getSystemLogs(20);
+                    reportTitle = 'Общий отчет системы';
+                    break;
+                    
+                case 'users':
+                    stats = await getDetailedStats(start_date, end_date);
+                    reportTitle = 'Отчет по пользователям';
+                    break;
+                    
+                case 'content':
+                    stats = await getDetailedStats(start_date, end_date);
+                    reportTitle = 'Отчет по контенту';
+                    break;
+                    
+                default:
+                    stats = await getDetailedStats(start_date, end_date);
+                    activity = await getRecentActivity();
+                    reportTitle = 'Системный отчет';
+            }
+
+            // Создаем PDF документ
+            const doc = new PDFDocument();
+            
+            // Устанавливаем заголовки для скачивания
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 
+                `attachment; filename="admin_report_${new Date().toISOString().split('T')[0]}.pdf"`);
+
+            // Пайпим PDF в ответ
+            doc.pipe(res);
+
+            // Регистрируем кастомный шрифт для поддержки кириллицы
+            try {
+                const fontPath = path.join(__dirname, '../fonts/arial unicode ms.otf');
+                if (fs.existsSync(fontPath)) {
+                    doc.font(fontPath);
+                    console.log('✅ Using custom Arial Unicode MS font for Cyrillic support');
+                } else {
+                    doc.font('Times-Roman');
+                    console.log('⚠️ Custom font not found, using Times-Roman');
+                }
+            } catch (fontError) {
+                console.error('❌ Font error, using Times-Roman:', fontError);
+                doc.font('Times-Roman');
+            }
+
+            // Заголовок документа
+            doc.fontSize(20)
+               .fillColor('#2c3e50')
+               .text(reportTitle, 50, 50)
+               .moveDown(0.5);
+
+            doc.fontSize(12)
+               .fillColor('#666')
+               .text(`Период: ${start_date || 'все время'} - ${end_date || 'по настоящее время'}`)
+               .text(`Тип отчета: ${report_type}`)
+               .text(`Сгенерировано: ${new Date().toLocaleString('ru-RU')}`)
+               .text(`Сгенерировал: Администратор`)
+               .moveDown();
+
+            let yPosition = 150;
+
+            // Раздел статистики
+            doc.fontSize(16)
+               .fillColor('#2c3e50')
+               .text('📊 Статистика системы', 50, yPosition)
+               .moveDown(0.5);
+
+            yPosition = doc.y;
+
+            // Статистика пользователей
+            doc.fontSize(12)
+               .fillColor('#333')
+               .text(`👥 Пользователи:`, 50, yPosition)
+               .text(`   Всего пользователей: ${stats.total_users || 0}`, 70, doc.y + 15)
+               .text(`   Новых за период: ${stats.new_users_period || 0}`, 70, doc.y + 15)
+               .text(`   Администраторов: ${stats.admin_count || 0}`, 70, doc.y + 15)
+               .text(`   Модераторов: ${stats.moderator_count || 0}`, 70, doc.y + 15)
+               .text(`   Активных: ${stats.active_users || 0}`, 70, doc.y + 15)
+               .text(`   Заблокированных: ${stats.banned_users || 0}`, 70, doc.y + 15)
+               .moveDown(0.3);
+
+            // Статистика контента
+            doc.text(`📝 Контент:`, 50, doc.y)
+               .text(`   Всего тем: ${stats.total_topics || 0}`, 70, doc.y + 15)
+               .text(`   Новых тем за период: ${stats.new_topics_period || 0}`, 70, doc.y + 15)
+               .text(`   Всего комментариев: ${stats.total_comments || 0}`, 70, doc.y + 15)
+               .text(`   Новых комментариев за период: ${stats.new_comments_period || 0}`, 70, doc.y + 15)
+               .moveDown(0.3);
+
+            // Статистика жалоб
+            doc.text(`🚨 Жалобы:`, 50, doc.y)
+               .text(`   Всего жалоб: ${stats.total_reports || 0}`, 70, doc.y + 15)
+               .text(`   Новых жалоб за период: ${stats.new_reports_period || 0}`, 70, doc.y + 15)
+               .text(`   Решенных жалоб: ${stats.resolved_reports || 0}`, 70, doc.y + 15)
+               .text(`   Ожидающих обработки: ${stats.pending_reports || 0}`, 70, doc.y + 15)
+               .moveDown(0.5);
+
+            // Раздел последней активности (если есть)
+            if (activity.length > 0) {
+                if (doc.y > 650) {
+                    doc.addPage();
+                    yPosition = 50;
+                }
+
+                doc.fontSize(16)
+                   .fillColor('#2c3e50')
+                   .text('🔄 Последняя активность', 50, doc.y)
+                   .moveDown(0.3);
+
+                activity.forEach((item, index) => {
+                    if (doc.y > 700) {
+                        doc.addPage();
+                    }
+
+                    doc.fontSize(10)
+                       .fillColor('#333')
+                       .text(`${getActivityIcon(item.type)} ${item.description}: "${item.title}"`, 50, doc.y)
+                       .text(`   Дата: ${new Date(item.activity_date).toLocaleString('ru-RU')}`, 70, doc.y + 12)
+                       .moveDown(0.2);
+
+                    if (index < activity.length - 1) {
+                        doc.moveTo(50, doc.y)
+                           .lineTo(550, doc.y)
+                           .strokeColor('#eee')
+                           .lineWidth(0.5)
+                           .stroke();
+                        doc.moveDown(0.2);
+                    }
+                });
+            }
+
+            // Раздел логов системы (если есть)
+            if (logs.length > 0 && report_type === 'overview') {
+                if (doc.y > 600) {
+                    doc.addPage();
+                    yPosition = 50;
+                }
+
+                doc.fontSize(16)
+                   .fillColor('#2c3e50')
+                   .text('📋 Системные логи', 50, doc.y)
+                   .moveDown(0.3);
+
+                logs.forEach((log, index) => {
+                    if (doc.y > 700) {
+                        doc.addPage();
+                    }
+
+                    const logColor = getLogColor(log.level);
+                    
+                    doc.fontSize(9)
+                       .fillColor(logColor)
+                       .text(`[${log.level.toUpperCase()}] ${new Date(log.created_at).toLocaleString('ru-RU')}`, 50, doc.y)
+                       .fillColor('#333')
+                       .text(`   ${log.message}`, 70, doc.y + 10)
+                       .moveDown(0.15);
+
+                    if (index < logs.length - 1) {
+                        doc.moveTo(50, doc.y)
+                           .lineTo(550, doc.y)
+                           .strokeColor('#f0f0f0')
+                           .lineWidth(0.3)
+                           .stroke();
+                        doc.moveDown(0.1);
+                    }
+                });
+            }
+
+            // Футер
+            doc.addPage();
+            doc.fontSize(10)
+               .fillColor('#666')
+               .text('--- Конец отчета ---', 50, 50)
+               .text('Сгенерировано автоматически системой F1 Forum', 50, 70)
+               .text(`Всего страниц: ${doc.bufferedPageRange().count || 1}`, 50, 85);
+
+            // Завершаем документ
+            doc.end();
+
+        } catch (error) {
+            console.error('❌ Generate admin PDF error:', error);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Ошибка генерации PDF отчета: ' + error.message 
+            });
+        }
+    },
+
+    // Остальные методы остаются без изменений...
     async getUsers(req, res) {
         try {
             const { page = 1, limit = 20, search = '' } = req.query;
@@ -240,7 +508,7 @@ const adminController = {
     },
 
     async deleteUser(req, res) {
-        try {
+         try {
             const { userId } = req.params;
 
             await db.query("DELETE FROM users WHERE id = $1", [userId]);
@@ -362,6 +630,28 @@ const adminController = {
             res.status(500).json({ success: false, error: error.message });
         }
     }
+    
 };
+
+// Вспомогательные функции
+function getActivityIcon(type) {
+    const icons = {
+        'user': '👤',
+        'topic': '📝', 
+        'comment': '💬',
+        'report': '🚨'
+    };
+    return icons[type] || '📌';
+}
+
+function getLogColor(level) {
+    const colors = {
+        'error': '#e74c3c',
+        'warn': '#f39c12',
+        'info': '#3498db',
+        'debug': '#95a5a6'
+    };
+    return colors[level] || '#333';
+}
 
 module.exports = adminController;

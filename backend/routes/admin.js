@@ -6,7 +6,8 @@ const adminController = require('../controllers/adminController');
 
 // Статистика системы
 router.get('/stats', adminAuth, adminController.getStats);
-
+// Добавьте в admin.js после импортов
+router.get('/reports/export/pdf', adminAuth, adminController.generateAdminReportPDF);
 // Управление пользователями
 router.get('/users', adminAuth, adminController.getUsers);
 router.get('/users/stats', adminAuth, adminController.getUserStats);

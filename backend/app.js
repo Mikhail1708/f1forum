@@ -20,7 +20,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/topics', require('./routes/topics'));
 app.use('/api/comments', require('./routes/comments'));
-app.use('/api/reports', require('./routes/reports')); // ДОБАВИТЬ ЭТУ СТРОКУ
+app.use('/api/reports', require('./routes/reports'));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -34,6 +34,18 @@ app.get('/api/health', (req, res) => {
 // Protected routes
 app.use('/api/admin', auth, require('./routes/admin'));
 app.use('/api/moderator', auth, require('./routes/moderator'));
+
+// Добавим логирование зарегистрированных маршрутов
+app._router.stack.forEach((middleware) => {
+  if (middleware.route) {
+    // Routes registered directly on the app
+    const methods = Object.keys(middleware.route.methods).join(', ').toUpperCase();
+    console.log(`📍 ${methods} ${middleware.route.path}`);
+  } else if (middleware.name === 'router') {
+    // Router middleware
+    console.log(`🔄 Router mounted: ${middleware.regexp}`);
+  }
+});
 
 // Error handling
 app.use((err, req, res, next) => {
@@ -52,7 +64,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET  /api/topics`);
   console.log(`   POST /api/topics`);
   console.log(`   GET  /api/topics/:id`);
-  console.log(`   GET  /api/comments/:topicId`);
-  console.log(`   POST /api/comments/:topicId`);
-  console.log(`   POST /api/reports`); // ДОБАВИТЬ ЭТУ СТРОКУ
+  console.log(`   GET  /api/comments/topic/:topicId`);
+  console.log(`   POST /api/comments`);
+  console.log(`   POST /api/reports`);
+  console.log(`   GET  /api/moderator/reports`);
+  console.log(`   GET  /api/moderator/reports/export/pdf`); // ДОБАВИТЬ ЭТУ СТРОКУ
 });

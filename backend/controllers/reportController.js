@@ -1,5 +1,6 @@
 // backend/controllers/reportController.js
 const db = require('../db/postgres');
+const PDFDocument = require('pdfkit');
 
 const reportController = {
     // Создать жалобу
@@ -267,7 +268,209 @@ const reportController = {
                 });
             }
         }
+    },
+
+    // Генерация PDF отчета
+async generateReportsPDF(req, res) {
+    try {
+        const { start_date, end_date, status = 'resolved' } = req.query;
+        
+        console.log('📊 Generating PDF report for resolved reports');
+
+        // Получаем обработанные отчеты
+        let query = `
+            SELECT 
+                r.*,
+                u1.username as reporter_name,
+                u1.email as reporter_email,
+                u2.username as author_name,
+                u2.email as author_email,
+                u3.username as moderator_name,
+                CASE 
+                    WHEN r.content_type = 'topic' THEN t.title
+                    WHEN r.content_type = 'comment' THEN LEFT(c.content, 200)
+                END as content_preview,
+                CASE 
+                    WHEN r.content_type = 'topic' THEN t.content
+                    WHEN r.content_type = 'comment' THEN c.content
+                END as full_content
+            FROM reports r
+            LEFT JOIN users u1 ON r.reporter_id = u1.id
+            LEFT JOIN users u2 ON r.author_id = u2.id
+            LEFT JOIN users u3 ON r.moderator_id = u3.id
+            LEFT JOIN topics t ON r.content_id = t.id AND r.content_type = 'topic'
+            LEFT JOIN comments c ON r.content_id = c.id AND r.content_type = 'comment'
+            WHERE r.status = $1
+        `;
+
+        const params = [status];
+        let paramCount = 1;
+
+        if (start_date) {
+            paramCount++;
+            query += ` AND r.resolved_at >= $${paramCount}`;
+            params.push(start_date);
+        }
+
+        if (end_date) {
+            paramCount++;
+            query += ` AND r.resolved_at <= $${paramCount}`;
+            params.push(end_date);
+        }
+
+        query += ' ORDER BY r.resolved_at DESC';
+
+        const reports = await db.query(query, params);
+
+        if (reports.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Нет обработанных отчетов для выбранного периода'
+            });
+        }
+
+        // Создаем PDF документ
+        const PDFDocument = require('pdfkit');
+        const fs = require('fs');
+        const path = require('path');
+        const doc = new PDFDocument();
+        
+        // Устанавливаем заголовки для скачивания
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 
+            `attachment; filename="reports_${new Date().toISOString().split('T')[0]}.pdf"`);
+
+        // Пайпим PDF в ответ
+        doc.pipe(res);
+
+        // Регистрируем кастомный шрифт для поддержки кириллицы
+        try {
+            const fontPath = path.join(__dirname, '../fonts/arial unicode ms.otf');
+            if (fs.existsSync(fontPath)) {
+                doc.font(fontPath);
+                console.log('✅ Using custom Arial Unicode MS font for Cyrillic support');
+            } else {
+                // Fallback на Times-Roman если кастомный шрифт не найден
+                doc.font('Times-Roman');
+                console.log('⚠️ Custom font not found, using Times-Roman');
+            }
+        } catch (fontError) {
+            console.error('❌ Font error, using Times-Roman:', fontError);
+            doc.font('Times-Roman');
+        }
+
+        // Заголовок документа
+        doc.fontSize(20)
+           .fillColor('#2c3e50')
+           .text('Отчет по обработанным жалобам', 50, 50)
+           .moveDown(0.5);
+
+        doc.fontSize(12)
+           .fillColor('#666')
+           .text(`Период: ${start_date || 'все время'} - ${end_date || 'по настоящее время'}`)
+           .text(`Сгенерировано: ${new Date().toLocaleString('ru-RU')}`)
+           .text(`Всего отчетов: ${reports.rows.length}`)
+           .moveDown();
+
+        let yPosition = 150;
+
+        // Добавляем каждый отчет в PDF
+        reports.rows.forEach((report, index) => {
+            // Проверяем, нужно ли добавить новую страницу
+            if (yPosition > 700) {
+                doc.addPage();
+                yPosition = 50;
+                
+                // Переустанавливаем шрифт на новой странице
+                try {
+                    const fontPath = path.join(__dirname, '../fonts/arial unicode ms.otf');
+                    if (fs.existsSync(fontPath)) {
+                        doc.font(fontPath);
+                    } else {
+                        doc.font('Times-Roman');
+                    }
+                } catch (e) {
+                    doc.font('Times-Roman');
+                }
+            }
+
+            // Заголовок отчета
+            doc.fontSize(14)
+               .fillColor('#2c3e50')
+               .text(`Жалоба #${report.id} - ${report.content_type === 'topic' ? 'Тема' : 'Комментарий'}`, 50, yPosition)
+               .moveDown(0.3);
+
+            // Основная информация
+            doc.fontSize(10)
+               .fillColor('#333')
+               .text(`Статус: ${report.status === 'resolved' ? 'Обработано' : 'В ожидании'}`, { continued: false })
+               .text(`Дата создания: ${new Date(report.created_at).toLocaleString('ru-RU')}`, { continued: false })
+               .text(`Дата обработки: ${report.resolved_at ? new Date(report.resolved_at).toLocaleString('ru-RU') : 'Не обработано'}`, { continued: false })
+               .text(`Жалоба от: ${report.reporter_name || 'Неизвестно'} (${report.reporter_email || 'Нет email'})`, { continued: false })
+               .text(`Автор контента: ${report.author_name || 'Неизвестно'} (${report.author_email || 'Нет email'})`, { continued: false })
+               .text(`Модератор: ${report.moderator_name || 'Не назначен'}`, { continued: false })
+               .moveDown(0.3);
+
+            // Причина жалобы
+            doc.fillColor('#e74c3c')
+               .text('Причина жалобы:', { continued: false })
+               .fillColor('#333')
+               .text(` ${report.reason || 'Не указана'}`)
+               .moveDown(0.3);
+
+            // Решение
+            if (report.resolution) {
+                doc.fillColor('#27ae60')
+                   .text('Решение:', { continued: false })
+                   .fillColor('#333')
+                   .text(` ${report.resolution}`)
+                   .moveDown(0.3);
+            }
+
+            // Комментарий модератора
+            if (report.moderator_notes) {
+                doc.fillColor('#3498db')
+                   .text('Комментарий модератора:', { continued: false })
+                   .fillColor('#333')
+                   .text(` ${report.moderator_notes}`)
+                   .moveDown(0.3);
+            }
+
+            // Содержание
+            const content = report.full_content || report.content_preview || 'Содержание не доступно';
+            // Обрезаем длинный контент чтобы не выходить за пределы страницы
+            const truncatedContent = content.length > 500 ? content.substring(0, 500) + '...' : content;
+            
+            doc.fillColor('#666')
+               .text('Содержание:', { continued: false })
+               .fillColor('#333')
+               .text(` ${truncatedContent}`)
+               .moveDown(0.5);
+
+            // Разделитель между отчетами
+            if (index < reports.rows.length - 1) {
+                doc.moveTo(50, doc.y)
+                   .lineTo(550, doc.y)
+                   .strokeColor('#ddd')
+                   .lineWidth(1)
+                   .stroke();
+                doc.moveDown(0.5);
+            }
+
+            yPosition = doc.y;
+        });
+
+        // Завершаем документ
+        doc.end();
+
+    } catch (error) {
+        console.error('❌ Generate PDF error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Ошибка генерации PDF отчета: ' + error.message 
+        });
     }
+}
 };
 
 module.exports = reportController;

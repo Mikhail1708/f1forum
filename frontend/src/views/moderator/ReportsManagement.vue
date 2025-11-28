@@ -18,6 +18,35 @@
             Решенные ({{ resolvedReports.length }})
           </button>
         </div>
+        
+        <!-- Кнопка экспорта PDF -->
+        <div class="export-section" v-if="activeTab === 'resolved' && resolvedReports.length > 0">
+          <button @click="exportToPDF" class="btn btn-export">
+            📊 Экспорт в PDF
+          </button>
+          
+          <!-- Фильтры для экспорта -->
+          <div class="export-filters" v-if="showExportFilters">
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>Начальная дата:</label>
+                <input type="date" v-model="exportFilters.start_date" class="filter-input">
+              </div>
+              <div class="filter-group">
+                <label>Конечная дата:</label>
+                <input type="date" v-model="exportFilters.end_date" class="filter-input">
+              </div>
+            </div>
+            <div class="filter-actions">
+              <button @click="confirmExport" class="btn btn-primary">
+                📥 Скачать отчет
+              </button>
+              <button @click="showExportFilters = false" class="btn btn-secondary">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -125,6 +154,11 @@ export default {
       resolved: []
     })
     const loading = ref(false)
+    const showExportFilters = ref(false)
+    const exportFilters = ref({
+      start_date: '',
+      end_date: ''
+    })
 
     // Computed
     const currentReports = computed(() => {
@@ -205,80 +239,77 @@ export default {
       }
     }
 
-  const viewOriginalContent = async (report) => {
-  console.log('🔍 Viewing original content for report:', report);
-  
-  try {
-    if (report.content_type === 'topic') {
-      // Для темы
+    const exportToPDF = () => {
+      showExportFilters.value = !showExportFilters.value
+    }
+
+    const confirmExport = async () => {
       try {
-        await discussionsStore.fetchDiscussion(report.content_id);
-        
-        if (discussionsStore.currentDiscussion) {
-          router.push(`/discussion/${report.content_id}`);
-        } else {
-          throw new Error('Topic not found');
-        }
+        loading.value = true
+        const result = await api.exportReportsPDF(exportFilters.value)
+        alert(`✅ Отчет успешно скачан: ${result.fileName}`)
+        showExportFilters.value = false
       } catch (error) {
-        console.error('❌ Topic not found:', error);
-        alert('❌ Обсуждение не найдено. Возможно оно было удалено при обработке жалобы.');
-      }
-    } 
-    else if (report.content_type === 'comment') {
-      // Для комментария - используем прямой подход
-      try {
-        // Пробуем загрузить все комментарии темы чтобы найти наш
-        const topicsResponse = await api.get('/topics');
-        const topics = topicsResponse.data.topics || topicsResponse.data;
-        
-        let targetTopicId = null;
-        
-        // Ищем тему которая содержит этот комментарий
-        for (const topic of topics) {
-          try {
-            const topicResponse = await api.get(`/topics/${topic.id}`);
-            const topicData = topicResponse.data.topic || topicResponse.data;
-            
-            if (topicData.comments) {
-              // Проверяем все комментарии и ответы
-              const checkComments = (comments) => {
-                for (const comment of comments) {
-                  if (comment.id == report.content_id) {
-                    return true;
-                  }
-                  if (comment.replies && comment.replies.some(reply => reply.id == report.content_id)) {
-                    return true;
-                  }
-                }
-                return false;
-              };
-              
-              if (checkComments(topicData.comments)) {
-                targetTopicId = topic.id;
-                break;
-              }
-            }
-          } catch (topicError) {
-            console.log(`❌ Could not check topic ${topic.id}:`, topicError.message);
-          }
-        }
-        
-        if (targetTopicId) {
-          await discussionsStore.fetchDiscussion(targetTopicId);
-          router.push(`/discussion/${targetTopicId}?comment=${report.content_id}`);
-        } else {
-          throw new Error('Comment not found in any topic');
-        }
-      } catch (error) {
-        console.error('❌ Error finding comment:', error);
-        alert('❌ Комментарий не найден в системе.');
+        console.error('❌ Ошибка экспорта PDF:', error)
+        alert('❌ Ошибка при скачивании отчета')
+      } finally {
+        loading.value = false
       }
     }
-  } catch (error) {
-    console.error('❌ Error viewing content:', error);
-    alert('❌ Не удалось открыть контент.');
-  }
-};
+
+    const viewOriginalContent = async (report) => {
+      console.log('🔍 Viewing original content for report:', report);
+      
+      try {
+        if (report.content_type === 'topic') {
+          router.push(`/discussion/${report.content_id}`);
+        } else if (report.content_type === 'comment') {
+          // Для комментария используем прямой подход
+          const topicsResponse = await api.get('/topics');
+          const topics = topicsResponse.data.topics || topicsResponse.data;
+          
+          let targetTopicId = null;
+          
+          // Ищем тему которая содержит этот комментарий
+          for (const topic of topics) {
+            try {
+              const topicResponse = await api.get(`/topics/${topic.id}`);
+              const topicData = topicResponse.data.topic || topicResponse.data;
+              
+              if (topicData.comments) {
+                const checkComments = (comments) => {
+                  for (const comment of comments) {
+                    if (comment.id == report.content_id) {
+                      return true;
+                    }
+                    if (comment.replies && comment.replies.some(reply => reply.id == report.content_id)) {
+                      return true;
+                    }
+                  }
+                  return false;
+                };
+                
+                if (checkComments(topicData.comments)) {
+                  targetTopicId = topic.id;
+                  break;
+                }
+              }
+            } catch (topicError) {
+              console.log(`❌ Could not check topic ${topic.id}:`, topicError.message);
+            }
+          }
+          
+          if (targetTopicId) {
+            router.push(`/discussion/${targetTopicId}?comment=${report.content_id}`);
+          } else {
+            throw new Error('Comment not found in any topic');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error viewing content:', error);
+        alert('❌ Не удалось открыть контент.');
+      }
+    };
 
     // Вспомогательные функции
     const getContentTypeIcon = (type) => {
@@ -367,9 +398,13 @@ export default {
       currentReports,
       pendingReports,
       resolvedReports,
+      showExportFilters,
+      exportFilters,
       loadReports,
       quickResolve,
       reopenReport,
+      exportToPDF,
+      confirmExport,
       viewOriginalContent,
       getContentTypeIcon,
       getContentTypeText,
@@ -391,6 +426,11 @@ export default {
 
 .header-controls {
   margin-top: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .header-tabs {
@@ -412,6 +452,53 @@ export default {
   background: #3498db;
   color: white;
   border-color: #3498db;
+}
+
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.export-filters {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  min-width: 300px;
+}
+
+.filter-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.filter-group label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.filter-input {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
 }
 
 /* Список жалоб */
@@ -575,7 +662,12 @@ export default {
   font-size: 0.9rem;
 }
 
-.btn-info {
+.btn-export {
+  background: #9b59b6;
+  color: white;
+}
+
+.btn-primary {
   background: #3498db;
   color: white;
 }
@@ -592,6 +684,11 @@ export default {
 
 .btn-warning {
   background: #f39c12;
+  color: white;
+}
+
+.btn-secondary {
+  background: #95a5a6;
   color: white;
 }
 
@@ -637,6 +734,19 @@ export default {
 /* Адаптивность */
 @media (max-width: 768px) {
   .header-tabs {
+    flex-direction: column;
+  }
+  
+  .header-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .export-section {
+    align-items: stretch;
+  }
+  
+  .filter-row {
     flex-direction: column;
   }
   

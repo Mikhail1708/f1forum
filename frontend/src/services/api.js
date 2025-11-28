@@ -56,4 +56,41 @@ api.interceptors.response.use(
   }
 );
 
+// Метод для экспорта отчетов в PDF
+api.exportReportsPDF = async (params = {}) => {
+    try {
+        const response = await api.get('/moderator/reports/export/pdf', {
+            params,
+            responseType: 'blob' // Важно для скачивания файлов
+        });
+        
+        // Создаем URL для скачивания
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Получаем имя файла из заголовков или генерируем
+        const contentDisposition = response.headers['content-disposition'];
+        let fileName = `reports_${new Date().toISOString().split('T')[0]}.pdf`;
+        
+        if (contentDisposition) {
+            const fileNameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (fileNameMatch && fileNameMatch.length === 2) {
+                fileName = fileNameMatch[1];
+            }
+        }
+        
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        
+        return { success: true, fileName };
+    } catch (error) {
+        console.error('❌ PDF Export Error:', error);
+        throw error;
+    }
+};
+
 export default api;
