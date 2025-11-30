@@ -1,6 +1,5 @@
 // frontend/services/api.js
 import axios from 'axios';
-import { useAuthStore } from '../stores/auth';
 
 // Создаем экземпляр axios с базовыми настройками
 const api = axios.create({
@@ -11,8 +10,8 @@ const api = axios.create({
 // Interceptor для запросов
 api.interceptors.request.use(
   (config) => {
-    const authStore = useAuthStore();
-    const token = authStore.token;
+    // Получаем токен из localStorage напрямую
+    const token = localStorage.getItem('token');
     
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -21,7 +20,6 @@ api.interceptors.request.use(
     config.headers['Content-Type'] = 'application/json';
     
     console.log('🚀 API Request:', config.method?.toUpperCase(), config.url);
-    console.log('📦 Headers:', config.headers);
     
     return config;
   },
@@ -34,7 +32,7 @@ api.interceptors.request.use(
 // Interceptor для ответов
 api.interceptors.response.use(
   (response) => {
-    console.log('✅ API Response:', response.status, response.data);
+    console.log('✅ API Response:', response.status, response.config.url);
     return response;
   },
   (error) => {
@@ -46,9 +44,9 @@ api.interceptors.response.use(
     });
     
     if (error.response?.status === 401) {
-      const authStore = useAuthStore();
-      console.log('🔒 Auth error, logging out...');
-      authStore.logout();
+      // Очищаем localStorage и редиректим
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       window.location.href = '/login';
     }
     

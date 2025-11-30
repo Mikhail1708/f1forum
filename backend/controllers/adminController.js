@@ -4,53 +4,73 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-// Вынесем функцию получения активности отдельно
-async function getRecentActivity() {
+// Обновленная функция получения активности с именами пользователей
+async function getRecentActivity(limit = 15) {
     try {
-        // Получаем последние действия из разных таблиц
         const activityQuery = `
             -- Последние зарегистрированные пользователи
             (SELECT 
                 'user' as type,
                 username as title,
-                'Зарегистрировался' as description,
+                CONCAT('Зарегистрировался: ', username) as description,
                 created_at as activity_date,
-                id as item_id
+                id as item_id,
+                username as actor_username
             FROM users 
             ORDER BY created_at DESC 
-            LIMIT 3)
+            LIMIT 5)
             
             UNION ALL
             
-            -- Последние созданные темы
+            -- Последние созданные темы с именами авторов
             (SELECT 
                 'topic' as type,
-                title,
-                'Создал новую тему' as description,
-                created_at as activity_date,
-                id as item_id
-            FROM topics 
-            ORDER BY created_at DESC 
-            LIMIT 3)
+                t.title,
+                CONCAT('Создал тему: ', u.username) as description,
+                t.created_at as activity_date,
+                t.id as item_id,
+                u.username as actor_username
+            FROM topics t
+            LEFT JOIN users u ON t.user_id = u.id
+            ORDER BY t.created_at DESC 
+            LIMIT 5)
             
             UNION ALL
             
-            -- Последние комментарии
+            -- Последние комментарии с именами авторов
             (SELECT 
                 'comment' as type,
-                LEFT(content, 50) as title,
-                'Оставил комментарий' as description,
-                created_at as activity_date,
-                id as item_id
-            FROM comments 
-            ORDER BY created_at DESC 
-            LIMIT 3)
+                LEFT(c.content, 50) as title,
+                CONCAT('Оставил комментарий: ', u.username) as description,
+                c.created_at as activity_date,
+                c.id as item_id,
+                u.username as actor_username
+            FROM comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            ORDER BY c.created_at DESC 
+            LIMIT 5)
+            
+            UNION ALL
+            
+            -- Обработанные жалобы
+            (SELECT 
+                'report' as type,
+                CONCAT('Жалоба #', r.id) as title,
+                CONCAT('Обработал модератор: ', u.username) as description,
+                r.resolved_at as activity_date,
+                r.id as item_id,
+                u.username as actor_username
+            FROM reports r
+            LEFT JOIN users u ON r.moderator_id = u.id
+            WHERE r.status = 'resolved' AND r.resolved_at IS NOT NULL
+            ORDER BY r.resolved_at DESC 
+            LIMIT 5)
             
             ORDER BY activity_date DESC 
-            LIMIT 8
+            LIMIT $1
         `;
 
-        const { rows } = await db.query(activityQuery);
+        const { rows } = await db.query(activityQuery, [limit]);
         return rows;
 
     } catch (error) {
@@ -119,90 +139,163 @@ async function getDetailedStats(startDate, endDate) {
 
 const adminController = {
     async getStats(req, res) {
-        try {
-            console.log('📊 Getting admin stats...');
+    try {
+        console.log('📊 Getting admin stats...');
+        
+        // Получаем текущую дату для фильтрации "сегодня"
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        
+        // Получаем дату неделю назад
+        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+        // Выполняем все запросы параллельно для скорости
+        const [
+            usersData,
+            topicsData, 
+            commentsData,
+            reportsData,
+            newUsersToday,
+            newTopicsToday,
+            newCommentsToday,
+            userStats,
+            onlineUsersCount
+        ] = await Promise.all([
+            // Общая статистика пользователей
+            db.query(`
+                SELECT 
+                    COUNT(*) as total_users,
+                    COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_count,
+                    COUNT(CASE WHEN role = 'moderator' THEN 1 END) as moderator_count,
+                    COUNT(CASE WHEN status = 'active' THEN 1 END) as active_users,
+                    COUNT(CASE WHEN status = 'banned' THEN 1 END) as banned_users,
+                    COUNT(CASE WHEN created_at >= $1 THEN 1 END) as new_users_week
+                FROM users
+            `, [weekAgo]),
             
-            // Получаем текущую дату для фильтрации "сегодня"
-            const today = new Date();
-            const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+            // Статистика тем
+            db.query(`
+                SELECT 
+                    COUNT(*) as total_topics,
+                    SUM(views) as total_views,
+                    SUM(likes) as total_likes,
+                    COUNT(CASE WHEN created_at >= $1 THEN 1 END) as new_topics_week
+                FROM topics
+            `, [weekAgo]),
             
-            console.log('📅 Today range:', todayStart, 'to', todayEnd);
+            // Статистика комментариев
+            db.query(`
+                SELECT 
+                    COUNT(*) as total_comments,
+                    SUM(likes) as total_comment_likes,
+                    COUNT(CASE WHEN created_at >= $1 THEN 1 END) as new_comments_week
+                FROM comments
+            `, [weekAgo]),
+            
+            // Статистика жалоб
+            db.query(`
+                SELECT 
+                    COUNT(*) as total_reports,
+                    COUNT(CASE WHEN status = 'resolved' THEN 1 END) as resolved_reports,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_reports,
+                    COUNT(CASE WHEN created_at >= $1 THEN 1 END) as new_reports_week
+                FROM reports
+            `, [weekAgo]),
+            
+            // Новые пользователи за сегодня
+            db.query(
+                `SELECT COUNT(*) as count FROM users 
+                 WHERE created_at >= $1 AND created_at < $2`,
+                [todayStart, todayEnd]
+            ),
+            
+            // Новые темы за сегодня
+            db.query(
+                `SELECT COUNT(*) as count FROM topics 
+                 WHERE created_at >= $1 AND created_at < $2`,
+                [todayStart, todayEnd]
+            ),
+            
+            // Новые комментарии за сегодня
+            db.query(
+                `SELECT COUNT(*) as count FROM comments 
+                 WHERE created_at >= $1 AND created_at < $2`,
+                [todayStart, todayEnd]
+            ),
+            
+            // Дополнительная статистика пользователей
+            db.query(`
+                SELECT 
+                    COUNT(CASE WHEN last_login >= $1 THEN 1 END) as active_today,
+                    AVG(EXTRACT(EPOCH FROM (NOW() - created_at))/86400)::integer as avg_account_age_days
+                FROM users
+            `, [todayStart]),
+            
+            // Пользователи онлайн (за последние 15 минут)
+            db.query(`
+                SELECT COUNT(*) as count FROM users 
+                WHERE last_login >= NOW() - INTERVAL '15 minutes'
+            `)
+        ]);
 
-            // Выполняем все запросы параллельно для скорости
-            const [
-                usersCount,
-                topicsCount, 
-                commentsCount,
-                racesCount,
-                newUsersToday,
-                newTopicsToday,
-                newCommentsToday
-            ] = await Promise.all([
-                // Общее количество пользователей
-                db.query('SELECT COUNT(*) as count FROM users'),
-                
-                // Общее количество тем
-                db.query('SELECT COUNT(*) as count FROM topics'),
-                
-                // Общее количество комментариев
-                db.query('SELECT COUNT(*) as count FROM comments'),
-                
-                // Общее количество гонок
-                db.query('SELECT COUNT(*) as count FROM grand_prix'),
-                
-                // Новые пользователи за сегодня
-                db.query(
-                    `SELECT COUNT(*) as count FROM users 
-                     WHERE created_at >= $1 AND created_at < $2`,
-                    [todayStart, todayEnd]
-                ),
-                
-                // Новые темы за сегодня
-                db.query(
-                    `SELECT COUNT(*) as count FROM topics 
-                     WHERE created_at >= $1 AND created_at < $2`,
-                    [todayStart, todayEnd]
-                ),
-                
-                // Новые комментарии за сегодня
-                db.query(
-                    `SELECT COUNT(*) as count FROM comments 
-                     WHERE created_at >= $1 AND created_at < $2`,
-                    [todayStart, todayEnd]
-                )
-            ]);
+        // Формируем объект статистики
+        const stats = {
+            // Основные показатели
+            totalUsers: parseInt(usersData.rows[0].total_users),
+            totalTopics: parseInt(topicsData.rows[0].total_topics),
+            totalComments: parseInt(commentsData.rows[0].total_comments),
+            totalReports: parseInt(reportsData.rows[0].total_reports),
+            
+            // Активность сегодня
+            newUsersToday: parseInt(newUsersToday.rows[0].count),
+            newTopicsToday: parseInt(newTopicsToday.rows[0].count),
+            newCommentsToday: parseInt(newCommentsToday.rows[0].count),
+            
+            // Детальная статистика пользователей
+            admin_count: parseInt(usersData.rows[0].admin_count),
+            moderator_count: parseInt(usersData.rows[0].moderator_count),
+            active_users: parseInt(usersData.rows[0].active_users),
+            banned_users: parseInt(usersData.rows[0].banned_users),
+            new_users_week: parseInt(usersData.rows[0].new_users_week),
+            active_today: parseInt(userStats.rows[0].active_today),
+            avg_account_age_days: parseInt(userStats.rows[0].avg_account_age_days),
+            online_users: parseInt(onlineUsersCount.rows[0].count),
+            
+            // Статистика контента
+            total_views: parseInt(topicsData.rows[0].total_views || 0),
+            total_likes: parseInt(topicsData.rows[0].total_likes || 0),
+            total_comment_likes: parseInt(commentsData.rows[0].total_comment_likes || 0),
+            new_topics_week: parseInt(topicsData.rows[0].new_topics_week),
+            new_comments_week: parseInt(commentsData.rows[0].new_comments_week),
+            
+            // Статистика модерации
+            resolved_reports: parseInt(reportsData.rows[0].resolved_reports),
+            pending_reports: parseInt(reportsData.rows[0].pending_reports),
+            new_reports_week: parseInt(reportsData.rows[0].new_reports_week)
+        };
 
-            const stats = {
-                totalUsers: parseInt(usersCount.rows[0].count),
-                totalTopics: parseInt(topicsCount.rows[0].count),
-                totalComments: parseInt(commentsCount.rows[0].count),
-                totalRaces: parseInt(racesCount.rows[0].count),
-                newUsersToday: parseInt(newUsersToday.rows[0].count),
-                newTopicsToday: parseInt(newTopicsToday.rows[0].count),
-                newCommentsToday: parseInt(newCommentsToday.rows[0].count)
-            };
+        console.log('📊 Real database stats loaded:', stats);
 
-            console.log('📊 Database stats:', stats);
+        // Получаем последнюю активность
+        const recentActivity = await getRecentActivity(10);
 
-            // Получаем последнюю активность
-            const recentActivity = await getRecentActivity();
+        res.json({
+            success: true,
+            stats: stats,
+            recentActivity: recentActivity
+        });
 
-            res.json({
-                success: true,
-                stats: stats,
-                recentActivity: recentActivity
-            });
+    } catch (error) {
+        console.error('❌ Stats error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message,
+            details: 'Database query failed'
+        });
+    }
+},
 
-        } catch (error) {
-            console.error('❌ Stats error:', error);
-            res.status(500).json({ 
-                success: false, 
-                error: error.message,
-                details: 'Database query failed'
-            });
-        }
-    },
 
     // Генерация PDF отчета для админки
     async generateAdminReportPDF(req, res) {

@@ -19,15 +19,11 @@
           <router-link to="/admin/users" class="nav-item">
             👥 Пользователи
           </router-link>
-          <router-link to="/admin/content" class="nav-item">
-            📝 Контент
-          </router-link>
+         
           <router-link to="/admin/backups" class="nav-item">
             💾 Бэкапы
           </router-link>
-          <router-link to="/admin/system" class="nav-item">
-            ⚙️ Система
-          </router-link>
+          
         </nav>
       </aside>
 

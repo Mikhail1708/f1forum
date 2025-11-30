@@ -4,7 +4,7 @@
     <div class="dashboard-header">
       <div class="header-content">
         <div class="header-text">
-          <h1>🚀 Админ-панель F1 Forum</h1>
+          <h1>Админ-панель F1 Forum</h1>
           <p>Полный обзор системы и управление</p>
         </div>
         
@@ -28,10 +28,10 @@
               >
             </div>
             <button @click="applyFilters" class="btn btn-primary">
-              🔍 Применить
+              Применить
             </button>
             <button @click="resetFilters" class="btn btn-secondary">
-              🔄 Сбросить
+              Сбросить
             </button>
           </div>
 
@@ -42,7 +42,7 @@
               class="btn btn-success"
               :disabled="loading"
             >
-              📊 Экспорт отчетов
+              Экспорт отчетов
             </button>
             
             <!-- Опции экспорта -->
@@ -50,22 +50,19 @@
               <div class="export-types">
                 <label>Тип отчета:</label>
                 <select v-model="exportType" class="export-select">
-                  <option value="overview">📈 Общий отчет</option>
-                  <option value="users">👥 Отчет по пользователям</option>
-                  <option value="content">📝 Отчет по контенту</option>
-                  <option value="reports">🚨 Отчет по жалобам</option>
+                  <option value="overview">Общий отчет</option>
+                  <option value="users">Отчет по пользователям</option>
+                  <option value="content">Отчет по контенту</option>
+                  <option value="reports">Отчет по жалобам</option>
                 </select>
               </div>
               
               <div class="export-actions">
                 <button @click="downloadPDFReport" class="btn btn-primary">
-                  📥 PDF отчет
-                </button>
-                <button @click="downloadExcelReport" class="btn btn-success">
-                  📊 Excel отчет
+                  PDF отчет
                 </button>
                 <button @click="showExportOptions = false" class="btn btn-secondary">
-                  ❌ Отмена
+                  Отмена
                 </button>
               </div>
             </div>
@@ -86,7 +83,7 @@
         <h3>Ошибка загрузки</h3>
         <p>{{ error }}</p>
         <button @click="loadStats" class="btn btn-primary">
-          🔄 Повторить попытку
+          Повторить попытку
         </button>
       </div>
     </div>
@@ -95,7 +92,7 @@
     <div v-else class="dashboard-content">
       <!-- Статистика в реальном времени -->
       <div class="stats-section">
-        <h2>📊 Статистика в реальном времени</h2>
+        <h2>Статистика в реальном времени</h2>
         <div class="stats-grid">
           <!-- Пользователи -->
           <div class="stat-card user-stats">
@@ -113,6 +110,14 @@
               <div class="stat-detail">
                 <span class="label">Новых сегодня:</span>
                 <span class="value highlight">{{ stats.newUsersToday }}</span>
+              </div>
+              <div class="stat-detail">
+                <span class="label">Онлайн сейчас:</span>
+                <span class="value highlight">{{ onlineUsers }}</span>
+              </div>
+              <div class="stat-detail">
+                <span class="label">Активных сегодня:</span>
+                <span class="value">{{ stats.active_today || 0 }}</span>
               </div>
               <div class="stat-detail">
                 <span class="label">Админы:</span>
@@ -150,6 +155,14 @@
                 <span class="label">Новых комментов:</span>
                 <span class="value highlight">{{ stats.newCommentsToday }}</span>
               </div>
+              <div class="stat-detail">
+                <span class="label">Просмотры:</span>
+                <span class="value">{{ formatNumber(totalViews) }}</span>
+              </div>
+              <div class="stat-detail">
+                <span class="label">Лайки:</span>
+                <span class="value">{{ formatNumber(totalLikes) }}</span>
+              </div>
             </div>
           </div>
 
@@ -167,16 +180,24 @@
             </div>
             <div class="stat-details">
               <div class="stat-detail">
-                <span class="label">Онлайн сейчас:</span>
-                <span class="value highlight">{{ onlineUsers }}</span>
+                <span class="label">Новых за неделю:</span>
+                <span class="value highlight">{{ stats.new_users_week + stats.new_topics_week + stats.new_comments_week }}</span>
               </div>
               <div class="stat-detail">
-                <span class="label">Просмотры:</span>
-                <span class="value">{{ formatNumber(totalViews) }}</span>
+                <span class="label">Средний возраст аккаунтов:</span>
+                <span class="value">{{ stats.avg_account_age_days || 0 }} дн.</span>
               </div>
               <div class="stat-detail">
-                <span class="label">Лайки:</span>
-                <span class="value">{{ formatNumber(totalLikes) }}</span>
+                <span class="label">Пользователей за неделю:</span>
+                <span class="value">{{ stats.new_users_week || 0 }}</span>
+              </div>
+              <div class="stat-detail">
+                <span class="label">Тем за неделю:</span>
+                <span class="value">{{ stats.new_topics_week || 0 }}</span>
+              </div>
+              <div class="stat-detail">
+                <span class="label">Комментариев за неделю:</span>
+                <span class="value">{{ stats.new_comments_week || 0 }}</span>
               </div>
             </div>
           </div>
@@ -190,7 +211,7 @@
               </div>
             </div>
             <div class="stat-main">
-              <h3>{{ formatNumber(stats.total_reports || 0) }}</h3>
+              <h3>{{ formatNumber(stats.totalReports || 0) }}</h3>
               <p>Всего жалоб</p>
             </div>
             <div class="stat-details">
@@ -206,55 +227,16 @@
                 <span class="value success">{{ stats.resolved_reports || 0 }}</span>
               </div>
               <div class="stat-detail">
+                <span class="label">Новых за неделю:</span>
+                <span class="value">{{ stats.new_reports_week || 0 }}</span>
+              </div>
+              <div class="stat-detail">
                 <span class="label">Эффективность:</span>
                 <span class="value">{{ moderationEfficiency }}%</span>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Графики и аналитика -->
-      <div class="analytics-section">
-        <div class="analytics-grid">
-          <!-- Активность по времени -->
-          <div class="chart-card">
-            <div class="chart-header">
-              <h3>📈 Активность по дням</h3>
-              <select v-model="chartPeriod" class="chart-select">
-                <option value="7d">7 дней</option>
-                <option value="30d">30 дней</option>
-                <option value="90d">90 дней</option>
-              </select>
-            </div>
-            <div class="chart-placeholder">
-              <div class="chart-message">
-                <div class="chart-icon">📊</div>
-                <p>График активности</p>
-                <small>Данные обновляются в реальном времени</small>
-              </div>
-            </div>
-          </div>
-
-          <!-- Распределение контента -->
-          <div class="chart-card">
-            <div class="chart-header">
-              <h3>🥧 Распределение контента</h3>
-            </div>
-            <div class="chart-placeholder">
-              <div class="distribution-stats">
-                <div class="dist-item">
-                  <div class="dist-color topic"></div>
-                  <span>Темы: {{ stats.totalTopics }}</span>
-                </div>
-                <div class="dist-item">
-                  <div class="dist-color comment"></div>
-                  <span>Комментарии: {{ stats.totalComments }}</span>
-                </div>
-                <div class="dist-item">
-                  <div class="dist-color user"></div>
-                  <span>Пользователи: {{ stats.totalUsers }}</span>
-                </div>
+              <div class="stat-detail">
+                <span class="label">Заблокированных:</span>
+                <span class="value">{{ stats.banned_users || 0 }}</span>
               </div>
             </div>
           </div>
@@ -267,9 +249,9 @@
           <!-- Последняя активность -->
           <div class="activity-card">
             <div class="card-header">
-              <h3>🔄 Последняя активность</h3>
+              <h3>Последняя активность</h3>
               <button @click="loadStats" class="btn btn-sm btn-outline">
-                🔄 Обновить
+                Обновить
               </button>
             </div>
             <div class="activity-list">
@@ -284,10 +266,13 @@
                 </div>
                 <div class="activity-content">
                   <div class="activity-title">
-                    {{ activity.title }}
+                    {{ activity.actor_username || 'Система' }}
                   </div>
                   <div class="activity-description">
-                    {{ activity.description }}
+                    {{ formatActivityDescription(activity) }}
+                  </div>
+                  <div class="activity-details" v-if="activity.title">
+                    {{ activity.title }}
                   </div>
                 </div>
                 <div class="activity-time">
@@ -304,7 +289,7 @@
           <!-- Системные логи -->
           <div class="logs-card">
             <div class="card-header">
-              <h3>📋 Системные логи</h3>
+              <h3>Системные логи</h3>
               <div class="log-filters">
                 <select v-model="logLevel" class="log-select">
                   <option value="all">Все уровни</option>
@@ -342,7 +327,7 @@
 
       <!-- Быстрые действия -->
       <div class="quick-actions">
-        <h3>⚡ Быстрые действия</h3>
+        <h3>Быстрые действия</h3>
         <div class="actions-grid">
           <button @click="clearCache" class="action-btn cache">
             <span class="action-icon">🗑️</span>
@@ -381,8 +366,21 @@ const stats = ref({
   newCommentsToday: 0,
   admin_count: 0,
   moderator_count: 0,
+  active_users: 0,
+  banned_users: 0,
+  active_today: 0,
+  avg_account_age_days: 0,
+  online_users: 0,
+  total_views: 0,
+  total_likes: 0,
+  total_comment_likes: 0,
+  new_users_week: 0,
+  new_topics_week: 0,
+  new_comments_week: 0,
   total_reports: 0,
-  resolved_reports: 0
+  resolved_reports: 0,
+  pending_reports: 0,
+  new_reports_week: 0
 });
 
 const recentActivity = ref([]);
@@ -395,8 +393,45 @@ const filters = ref({
 });
 const showExportOptions = ref(false);
 const exportType = ref('overview');
-const chartPeriod = ref('7d');
 const logLevel = ref('all');
+
+// Computed свойства с реальными данными
+const userTrend = computed(() => {
+  const total = stats.value.totalUsers;
+  const week = stats.value.new_users_week;
+  return total > 0 ? Math.round((week / total) * 100) : 0;
+});
+
+const contentTrend = computed(() => {
+  const total = stats.value.totalTopics + stats.value.totalComments;
+  const week = stats.value.new_topics_week + stats.value.new_comments_week;
+  return total > 0 ? Math.round((week / total) * 100) : 0;
+});
+
+const activityTrend = computed(() => {
+  const today = stats.value.newUsersToday + stats.value.newTopicsToday + stats.value.newCommentsToday;
+  const weekAvg = (stats.value.new_users_week + stats.value.new_topics_week + stats.value.new_comments_week) / 7;
+  return weekAvg > 0 ? Math.round((today / weekAvg) * 100) : 0;
+});
+
+const dailyActivity = computed(() => 
+  stats.value.newUsersToday + stats.value.newTopicsToday + stats.value.newCommentsToday
+);
+
+const onlineUsers = computed(() => stats.value.online_users || 0);
+const totalViews = computed(() => stats.value.total_views || 0);
+const totalLikes = computed(() => (stats.value.total_likes || 0) + (stats.value.total_comment_likes || 0));
+const pendingReports = computed(() => stats.value.pending_reports || 0);
+const moderationEfficiency = computed(() => {
+  const total = stats.value.total_reports || 0;
+  const resolved = stats.value.resolved_reports || 0;
+  return total > 0 ? Math.round((resolved / total) * 100) : 100;
+});
+
+const filteredLogs = computed(() => {
+  if (logLevel.value === 'all') return systemLogs.value;
+  return systemLogs.value.filter(log => log.level === logLevel.value);
+});
 
 // Загрузка данных при монтировании
 onMounted(async () => {
@@ -420,7 +455,7 @@ const loadStats = async () => {
     if (response.data.success) {
       stats.value = { ...stats.value, ...response.data.stats };
       recentActivity.value = response.data.recentActivity || [];
-      console.log('✅ Статистика загружена');
+      console.log('✅ Статистика загружена:', stats.value);
     } else {
       error.value = response.data.error || 'Ошибка загрузки статистики';
     }
@@ -461,26 +496,6 @@ const loadSystemLogs = async () => {
   }
 };
 
-// Computed свойства
-const userTrend = computed(() => 12); // Заглушка для тренда
-const contentTrend = computed(() => 8);
-const activityTrend = computed(() => 15);
-const dailyActivity = computed(() => stats.value.newUsersToday + stats.value.newTopicsToday + stats.value.newCommentsToday);
-const onlineUsers = computed(() => Math.floor(Math.random() * 50) + 10); // Заглушка
-const totalViews = computed(() => stats.value.totalTopics * 15); // Заглушка
-const totalLikes = computed(() => stats.value.totalComments * 3); // Заглушка
-const pendingReports = computed(() => (stats.value.total_reports || 0) - (stats.value.resolved_reports || 0));
-const moderationEfficiency = computed(() => {
-  const total = stats.value.total_reports || 0;
-  const resolved = stats.value.resolved_reports || 0;
-  return total > 0 ? Math.round((resolved / total) * 100) : 100;
-});
-
-const filteredLogs = computed(() => {
-  if (logLevel.value === 'all') return systemLogs.value;
-  return systemLogs.value.filter(log => log.level === logLevel.value);
-});
-
 // Методы
 const applyFilters = () => {
   loadStats();
@@ -510,29 +525,17 @@ const downloadPDFReport = async () => {
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `admin_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    link.setAttribute('download', `system_report_${new Date().toISOString().split('T')[0]}.pdf`);
     document.body.appendChild(link);
     link.click();
     link.remove();
     
     showExportOptions.value = false;
-    alert('✅ PDF отчет успешно скачан');
   } catch (err) {
     console.error('❌ Ошибка экспорта PDF:', err);
-    alert('❌ Ошибка при скачивании PDF отчета');
+    alert('❌ Ошибка при скачивании отчета');
   } finally {
     loading.value = false;
-  }
-};
-
-const downloadExcelReport = async () => {
-  try {
-    // Заглушка для Excel экспорта
-    alert('📊 Функция Excel экспорта будет реализована в ближайшем обновлении');
-    showExportOptions.value = false;
-  } catch (err) {
-    console.error('❌ Ошибка экспорта Excel:', err);
-    alert('❌ Ошибка при создании Excel отчета');
   }
 };
 
@@ -544,6 +547,24 @@ const getActivityIcon = (type) => {
     'report': '🚨'
   };
   return icons[type] || '📌';
+};
+
+const formatActivityDescription = (activity) => {
+  // Если в описании уже есть информация о пользователе, используем её
+  if (activity.description && activity.actor_username) {
+    return activity.description;
+  }
+  
+  // Иначе формируем описание на основе типа активности
+  const types = {
+    'user': `Зарегистрирован новый пользователь`,
+    'topic': `Создана новая тема`,
+    'comment': `Добавлен новый комментарий`, 
+    'report': `Обработана жалоба`
+  };
+  
+  const baseText = types[activity.type] || 'Действие в системе';
+  return activity.actor_username ? `${baseText} пользователем ${activity.actor_username}` : baseText;
 };
 
 const formatActivityDate = (dateString) => {
@@ -606,18 +627,19 @@ const optimizeDatabase = () => {
 };
 
 const viewSystemInfo = () => {
-  alert('ℹ️ Информация о системе:\n\n' +
-        `Пользователей: ${stats.value.totalUsers}\n` +
-        `Тем: ${stats.value.totalTopics}\n` +
-        `Комментариев: ${stats.value.totalComments}\n` +
-        `Жалоб: ${stats.value.total_reports || 0}`);
+  const info = `
+Пользователей: ${stats.value.totalUsers}
+Тем: ${stats.value.totalTopics}
+Комментариев: ${stats.value.totalComments}
+Жалоб: ${stats.value.total_reports || 0}
+Онлайн: ${stats.value.online_users || 0}
+Активных сегодня: ${stats.value.active_today || 0}
+  `.trim();
+  
+  alert('Информация о системе:\n\n' + info);
 };
 
 // Наблюдатели
-watch(chartPeriod, () => {
-  console.log('📊 Период графика изменен:', chartPeriod.value);
-});
-
 watch(logLevel, () => {
   console.log('📋 Уровень логов изменен:', logLevel.value);
 });
@@ -914,94 +936,6 @@ watch(logLevel, () => {
   color: #e74c3c;
 }
 
-/* Аналитика */
-.analytics-section {
-  margin-bottom: 2rem;
-}
-
-.analytics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 1.5rem;
-}
-
-.chart-card {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.chart-header h3 {
-  margin: 0;
-  color: #2c3e50;
-  font-size: 1.2rem;
-}
-
-.chart-select {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.9rem;
-}
-
-.chart-placeholder {
-  height: 200px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px dashed #dee2e6;
-}
-
-.chart-message {
-  text-align: center;
-  color: #6c757d;
-}
-
-.chart-icon {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-}
-
-.distribution-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.dist-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.dist-color {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-}
-
-.dist-color.topic {
-  background: #3498db;
-}
-
-.dist-color.comment {
-  background: #27ae60;
-}
-
-.dist-color.user {
-  background: #9b59b6;
-}
-
 /* Активность и логи */
 .activity-section {
   margin-bottom: 2rem;
@@ -1055,7 +989,7 @@ watch(logLevel, () => {
 
 .activity-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid #f8f9fa;
@@ -1082,9 +1016,14 @@ watch(logLevel, () => {
   border-left: 3px solid #9b59b6;
 }
 
+.activity-item.report {
+  border-left: 3px solid #e74c3c;
+}
+
 .activity-icon {
   font-size: 1.5rem;
   flex-shrink: 0;
+  margin-top: 0.25rem;
 }
 
 .activity-content {
@@ -1100,12 +1039,21 @@ watch(logLevel, () => {
 .activity-description {
   color: #7f8c8d;
   font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.activity-details {
+  font-size: 0.85rem;
+  color: #666;
+  font-style: italic;
+  margin-top: 0.25rem;
 }
 
 .activity-time {
   color: #95a5a6;
   font-size: 0.8rem;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .log-item {
@@ -1170,8 +1118,7 @@ watch(logLevel, () => {
 }
 
 .no-activity,
-.no-logs,
-.no-data {
+.no-logs {
   padding: 3rem 2rem;
   text-align: center;
   color: #6c757d;
@@ -1312,7 +1259,6 @@ watch(logLevel, () => {
     grid-template-columns: 1fr;
   }
   
-  .analytics-grid,
   .activity-grid {
     grid-template-columns: 1fr;
   }

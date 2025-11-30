@@ -1,189 +1,320 @@
+// backend/controllers/backupController.js
+const db = require('../db/postgres');
+const { exec } = require('child-process-promise');
 const fs = require('fs');
 const path = require('path');
-const db = require('../db/db');
 
 const backupController = {
-  // Создание бэкапа
-  async createBackup(req, res) {
-    try {
-      const { name, notes } = req.body;
-      const backupDir = path.join(__dirname, '../backups');
+    // Получить список бэкапов
+    async getBackups(req, res) {
+        try {
+            console.log('📋 Getting backups list...');
 
-      // Создаем папку backups если её нет
-      if (!fs.existsSync(backupDir)) {
-        fs.mkdirSync(backupDir, { recursive: true });
-      }
+            const backups = await db.query(`
+                SELECT b.*, u.username as created_by_username 
+                FROM backups b
+                LEFT JOIN users u ON b.created_by = u.id
+                ORDER BY created_at DESC
+            `);
 
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const backupFileName = `backup-${timestamp}-${name || 'manual'}.db`;
-      const backupPath = path.join(backupDir, backupFileName);
-
-      // Копируем файл базы данных
-      const currentDbPath = path.join(__dirname, '../database.db');
-      fs.copyFileSync(currentDbPath, backupPath);
-
-      const stats = fs.statSync(backupPath);
-
-      // Записываем информацию о бэкапе в БД
-      const backupId = await new Promise((resolve, reject) => {
-        const sql = `INSERT INTO backups (filename, filepath, size, type, notes, created_by) VALUES (?, ?, ?, 'full', ?, ?)`;
-        db.run(sql, [backupFileName, backupPath, stats.size, notes, req.user.id], function(err) {
-          if (err) reject(err);
-          else resolve(this.lastID);
-        });
-      });
-
-      res.json({
-        success: true,
-        backup: {
-          id: backupId,
-          filename: backupFileName,
-          path: backupPath,
-          size: stats.size,
-          createdAt: new Date().toISOString()
+            res.json({
+                success: true,
+                backups: backups.rows
+            });
+        } catch (error) {
+            console.error('❌ Get backups error:', error);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Ошибка получения списка бэкапов' 
+            });
         }
-      });
-    } catch (error) {
-      console.error('Error creating backup:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
+    },
 
-  // Список бэкапов
-  async listBackups(req, res) {
-    try {
-      const backups = await new Promise((resolve, reject) => {
-        const sql = `
-          SELECT b.*, u.username as created_by_username 
-          FROM backups b 
-          LEFT JOIN user u ON b.created_by = u.id 
-          ORDER BY b.created_at DESC
-        `;
-        db.all(sql, [], (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        });
-      });
+    // Создать бэкап с помощью pg_dump
+    async createBackup(req, res) {
+        try {
+            const { name, notes } = req.body;
+            const userId = req.userId;
 
-      res.json({ success: true, backups });
-    } catch (error) {
-      console.error('Error listing backups:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
+            console.log('💾 Creating database backup...');
 
-  // Скачивание бэкапа
-  async downloadBackup(req, res) {
-    try {
-      const { backupId } = req.params;
+            // Получаем данные пользователя
+            const userResult = await db.query(
+                'SELECT username FROM users WHERE id = $1',
+                [userId]
+            );
+            const username = userResult.rows[0]?.username || 'system';
 
-      const backup = await new Promise((resolve, reject) => {
-        const sql = "SELECT * FROM backups WHERE id = ?";
-        db.get(sql, [backupId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
-      });
+            // Создаем папку для бэкапов если её нет
+            const backupDir = path.join(__dirname, '../backups');
+            if (!fs.existsSync(backupDir)) {
+                fs.mkdirSync(backupDir, { recursive: true });
+            }
 
-      if (!backup) {
-        return res.status(404).json({ success: false, error: 'Backup not found' });
-      }
+            // Генерируем имя файла
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `backup-${timestamp}.sql`;
+            const filePath = path.join(backupDir, filename);
 
-      if (!fs.existsSync(backup.filepath)) {
-        return res.status(404).json({ success: false, error: 'Backup file not found' });
-      }
+            // Получаем параметры подключения из .env
+            const dbConfig = {
+                host: process.env.DB_HOST || 'localhost',
+                port: process.env.DB_PORT || 5432,
+                database: process.env.DB_NAME || 'f1_forum',
+                user: process.env.DB_USER || 'postgres',
+                password: process.env.DB_PASSWORD || '123'
+            };
 
-      res.download(backup.filepath, backup.filename);
-    } catch (error) {
-      console.error('Error downloading backup:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
+            console.log('🔍 Database config:', {
+                host: dbConfig.host,
+                port: dbConfig.port,
+                database: dbConfig.database,
+                user: dbConfig.user
+            });
 
-  // Удаление бэкапа
-  async deleteBackup(req, res) {
-    try {
-      const { backupId } = req.params;
+            // Используем правильный путь к pg_dump для PostgreSQL 18
+            const pgDumpPath = '"C:\\Program Files\\PostgreSQL\\18\\bin\\pg_dump.exe"';
 
-      const backup = await new Promise((resolve, reject) => {
-        const sql = "SELECT * FROM backups WHERE id = ?";
-        db.get(sql, [backupId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
-      });
+            // Создаем бэкап с помощью pg_dump
+            const dumpCommand = `${pgDumpPath} -h ${dbConfig.host} -p ${dbConfig.port} -U ${dbConfig.user} -d ${dbConfig.database} -f "${filePath}"`;
+            
+            console.log('🚀 Executing command:', dumpCommand);
+            
+            await exec(dumpCommand, { 
+                env: { 
+                    ...process.env, 
+                    PGPASSWORD: dbConfig.password 
+                } 
+            });
 
-      if (!backup) {
-        return res.status(404).json({ success: false, error: 'Backup not found' });
-      }
+            // Получаем размер файла
+            const stats = fs.statSync(filePath);
+            const fileSize = stats.size;
 
-      // Удаляем файл
-      if (fs.existsSync(backup.filepath)) {
-        fs.unlinkSync(backup.filepath);
-      }
+            // Сохраняем информацию о бэкапе в базу
+            const backupResult = await db.query(`
+                INSERT INTO backups (filename, file_path, size, created_by, notes)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING *
+            `, [filename, filePath, fileSize, userId, notes || null]);
 
-      // Удаляем запись из БД
-      await new Promise((resolve, reject) => {
-        const sql = "DELETE FROM backups WHERE id = ?";
-        db.run(sql, [backupId], function(err) {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+            console.log('✅ Backup created successfully:', filename);
+            console.log('📦 File size:', formatSize(fileSize));
 
-      res.json({ success: true, message: 'Backup deleted' });
-    } catch (error) {
-      console.error('Error deleting backup:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
+            res.json({
+                success: true,
+                backup: {
+                    ...backupResult.rows[0],
+                    created_by_username: username
+                },
+                message: 'Бэкап успешно создан'
+            });
 
-  // Восстановление из бэкапа
-  async restoreBackup(req, res) {
-    try {
-      const { backupId } = req.params;
-
-      const backup = await new Promise((resolve, reject) => {
-        const sql = "SELECT * FROM backups WHERE id = ?";
-        db.get(sql, [backupId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
-      });
-
-      if (!backup) {
-        return res.status(404).json({ success: false, error: 'Backup not found' });
-      }
-
-      if (!fs.existsSync(backup.filepath)) {
-        return res.status(404).json({ success: false, error: 'Backup file not found' });
-      }
-
-      const currentDbPath = path.join(__dirname, '../database.db');
-      const tempBackupPath = path.join(__dirname, '../database.db.temp');
-
-      // Создаем временную копию текущей БД
-      fs.copyFileSync(currentDbPath, tempBackupPath);
-
-      try {
-        // Заменяем текущую БД на бэкап
-        fs.copyFileSync(backup.filepath, currentDbPath);
-        res.json({ success: true, message: 'Database restored successfully' });
-      } catch (error) {
-        // В случае ошибки восстанавливаем из временной копии
-        fs.copyFileSync(tempBackupPath, currentDbPath);
-        throw error;
-      } finally {
-        // Удаляем временную копию
-        if (fs.existsSync(tempBackupPath)) {
-          fs.unlinkSync(tempBackupPath);
+        } catch (error) {
+            console.error('❌ Create backup error:', error);
+            
+            // Детальная информация об ошибке
+            let errorMessage = 'Ошибка создания бэкапа';
+            
+            if (error.stderr) {
+                console.error('pg_dump stderr:', error.stderr);
+                
+                if (error.stderr.includes('does not exist')) {
+                    errorMessage = `База данных "${process.env.DB_NAME}" не существует. Проверьте имя базы данных в настройках.`;
+                } else if (error.stderr.includes('password authentication failed')) {
+                    errorMessage = 'Ошибка аутентификации. Проверьте пароль базы данных.';
+                } else if (error.stderr.includes('connection')) {
+                    errorMessage = 'Ошибка подключения к базе данных. Проверьте хост и порт.';
+                } else {
+                    errorMessage = `Ошибка pg_dump: ${error.stderr}`;
+                }
+            } else {
+                errorMessage = error.message;
+            }
+            
+            res.status(500).json({ 
+                success: false, 
+                error: errorMessage 
+            });
         }
-      }
+    },
+
+    // В backend/controllers/backupController.js - метод downloadBackup
+async downloadBackup(req, res) {
+    try {
+        const { id } = req.params;
+
+        console.log('📥 Downloading backup:', id);
+
+        // Получаем информацию о бэкапе
+        const backupResult = await db.query(
+            'SELECT * FROM backups WHERE id = $1',
+            [id]
+        );
+
+        if (backupResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Бэкап не найден'
+            });
+        }
+
+        const backup = backupResult.rows[0];
+        const filePath = backup.file_path;
+
+        // Проверяем существование файла
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({
+                success: false,
+                error: 'Файл бэкапа не найден'
+            });
+        }
+
+        // Устанавливаем правильные заголовки для скачивания файла
+        res.setHeader('Content-Type', 'application/sql');
+        res.setHeader('Content-Disposition', `attachment; filename="${backup.filename}"`);
+        res.setHeader('Cache-Control', 'no-cache');
+        
+        // Отправляем файл
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+
+        console.log('✅ Backup download started:', backup.filename);
+
     } catch (error) {
-      console.error('Error restoring backup:', error);
-      res.status(500).json({ success: false, error: error.message });
+        console.error('❌ Download backup error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Ошибка скачивания бэкапа' 
+        });
     }
-  }
+},
+
+    // Восстановить из бэкапа
+    async restoreBackup(req, res) {
+        try {
+            const { id } = req.params;
+
+            console.log('🔄 Restoring from backup:', id);
+
+            // Получаем информацию о бэкапе
+            const backupResult = await db.query(
+                'SELECT * FROM backups WHERE id = $1',
+                [id]
+            );
+
+            if (backupResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Бэкап не найден'
+                });
+            }
+
+            const backup = backupResult.rows[0];
+            const filePath = backup.file_path;
+
+            // Проверяем существование файла
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Файл бэкапа не найден'
+                });
+            }
+
+            // Получаем параметры подключения из .env
+            const dbConfig = {
+                host: process.env.DB_HOST || 'localhost',
+                port: process.env.DB_PORT || 5432,
+                database: process.env.DB_NAME || 'f1_forum',
+                user: process.env.DB_USER || 'postgres',
+                password: process.env.DB_PASSWORD || '123'
+            };
+
+            // Используем правильный путь к psql для PostgreSQL 18
+            const psqlPath = '"C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe"';
+
+            // Восстанавливаем базу из бэкапа
+            const restoreCommand = `${psqlPath} -h ${dbConfig.host} -p ${dbConfig.port} -U ${dbConfig.user} -d ${dbConfig.database} -f "${filePath}"`;
+            
+            console.log('🚀 Executing restore command:', restoreCommand);
+            
+            await exec(restoreCommand, { 
+                env: { 
+                    ...process.env, 
+                    PGPASSWORD: dbConfig.password 
+                } 
+            });
+
+            console.log('✅ Database restored successfully from:', backup.filename);
+
+            res.json({
+                success: true,
+                message: 'База данных успешно восстановлена из бэкапа'
+            });
+
+        } catch (error) {
+            console.error('❌ Restore backup error:', error);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Ошибка восстановления из бэкапа: ' + error.message 
+            });
+        }
+    },
+
+    // Удалить бэкап
+    async deleteBackup(req, res) {
+        try {
+            const { id } = req.params;
+
+            console.log('🗑️ Deleting backup:', id);
+
+            // Получаем информацию о бэкапе
+            const backupResult = await db.query(
+                'SELECT * FROM backups WHERE id = $1',
+                [id]
+            );
+
+            if (backupResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Бэкап не найден'
+                });
+            }
+
+            const backup = backupResult.rows[0];
+
+            // Удаляем файл
+            if (fs.existsSync(backup.file_path)) {
+                fs.unlinkSync(backup.file_path);
+            }
+
+            // Удаляем запись из базы
+            await db.query('DELETE FROM backups WHERE id = $1', [id]);
+
+            console.log('✅ Backup deleted:', backup.filename);
+
+            res.json({
+                success: true,
+                message: 'Бэкап успешно удален'
+            });
+
+        } catch (error) {
+            console.error('❌ Delete backup error:', error);
+            res.status(500).json({ 
+                success: false, 
+                error: 'Ошибка удаления бэкапа' 
+            });
+        }
+    }
 };
+
+// Вспомогательная функция для форматирования размера
+function formatSize(bytes) {
+    if (!bytes) return '0 Б';
+    const sizes = ['Б', 'КБ', 'МБ', 'ГБ'];
+    if (bytes === 0) return '0 Б';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+}
 
 module.exports = backupController;
