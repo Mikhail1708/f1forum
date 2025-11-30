@@ -139,56 +139,54 @@ const backupController = {
         }
     },
 
-    // В backend/controllers/backupController.js - метод downloadBackup
-async downloadBackup(req, res) {
-    try {
-        const { id } = req.params;
+    // Скачать бэкап
+    async downloadBackup(req, res) {
+        try {
+            const { id } = req.params;
+            console.log('🎯 DOWNLOAD BACKUP STARTED - ID:', id);
 
-        console.log('📥 Downloading backup:', id);
+            // Получаем инфу о бэкапе
+            const backupResult = await db.query(
+                'SELECT * FROM backups WHERE id = $1',
+                [id]
+            );
 
-        // Получаем информацию о бэкапе
-        const backupResult = await db.query(
-            'SELECT * FROM backups WHERE id = $1',
-            [id]
-        );
+            console.log('📊 Found records:', backupResult.rows.length);
 
-        if (backupResult.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                error: 'Бэкап не найден'
-            });
+            if (backupResult.rows.length === 0) {
+                console.log('❌ Backup not found in database');
+                return res.status(404).json({ error: 'Бэкап не найден в базе данных' });
+            }
+
+            const backup = backupResult.rows[0];
+            const filePath = backup.file_path;
+
+            console.log('📁 File path:', filePath);
+            console.log('📝 File name:', backup.filename);
+
+            // Проверяем есть ли файл
+            if (!fs.existsSync(filePath)) {
+                console.log('❌ File does not exist on disk');
+                return res.status(404).json({ error: 'Файл бэкапа не найден на сервере' });
+            }
+
+            console.log('✅ File exists, sending...');
+
+            // Ставим заголовки
+            res.setHeader('Content-Type', 'application/sql');
+            res.setHeader('Content-Disposition', `attachment; filename="${backup.filename}"`);
+            
+            // Шлем файл
+            const fileStream = fs.createReadStream(filePath);
+            fileStream.pipe(res);
+
+            console.log('🎯 File sent to client');
+
+        } catch (error) {
+            console.error('💥 Download error:', error);
+            res.status(500).json({ error: 'Ошибка сервера: ' + error.message });
         }
-
-        const backup = backupResult.rows[0];
-        const filePath = backup.file_path;
-
-        // Проверяем существование файла
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({
-                success: false,
-                error: 'Файл бэкапа не найден'
-            });
-        }
-
-        // Устанавливаем правильные заголовки для скачивания файла
-        res.setHeader('Content-Type', 'application/sql');
-        res.setHeader('Content-Disposition', `attachment; filename="${backup.filename}"`);
-        res.setHeader('Cache-Control', 'no-cache');
-        
-        // Отправляем файл
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res);
-
-        console.log('✅ Backup download started:', backup.filename);
-
-    } catch (error) {
-        console.error('❌ Download backup error:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Ошибка скачивания бэкапа' 
-        });
-    }
-},
+    },
 
     // Восстановить из бэкапа
     async restoreBackup(req, res) {

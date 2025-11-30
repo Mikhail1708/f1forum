@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict GhRHOL3dHLwrr8WZhp0qtNCShkucfh3UP50nKOZGYHa4aLpKZVJeC576O9rmbaE
+\restrict NwCKTaMa9tCE04YTetR48IHlvhpacT3H4QUKhv6Vfeog2bxwhQao8LIX1TqsR1l
 
 -- Dumped from database version 18.0
 -- Dumped by pg_dump version 18.0
@@ -678,6 +678,7 @@ COPY public.comments (id, content, likes, user_id, parent_id, created_at, update
 89	фыфыфы	0	6	88	2025-11-18 23:53:15.207522	2025-11-18 23:53:15.207522	45	approved
 90	ыыы	0	6	\N	2025-11-18 23:53:25.390348	2025-11-18 23:53:25.390348	46	approved
 134	ка	0	6	\N	2025-11-30 14:48:21.910622	2025-11-30 14:48:21.910622	61	approved
+135	цуаауца	0	4	\N	2025-11-30 15:59:35.654751	2025-11-30 15:59:35.654751	61	approved
 102	аукаукаывывывыв	0	6	\N	2025-11-24 22:07:55.653618	2025-11-25 21:36:57.415858	54	approved
 94	длввввввввввв	1	4	\N	2025-11-20 22:36:02.796685	2025-11-20 22:36:29.54893	51	approved
 96	фыфыфыфыфыфы	0	4	94	2025-11-20 22:36:17.844104	2025-11-20 22:36:17.844104	51	approved
@@ -781,6 +782,7 @@ COPY public.moderator_actions (id, moderator_id, action_type, description, creat
 73	4	comment_approved	Одобрен комментарий #132	2025-11-26 22:05:31.448804
 74	4	comment_approved	Одобрен комментарий #133	2025-11-26 22:05:31.921113
 75	6	comment_approved	Одобрен комментарий #134	2025-11-30 14:49:45.814951
+76	4	comment_approved	Одобрен комментарий #135	2025-11-30 15:59:42.665844
 \.
 
 
@@ -835,7 +837,7 @@ COPY public.topics (id, title, content, tags, views, likes, comments_count, is_p
 51	ура	работает	["эта"]	11	1	0	f	f	2025-11-20 22:35:48.215874	2025-11-20 22:35:48.215874	4	\N	approved
 54	аааввввввввввввв	аааввввввв	["ааа"]	34	1	0	f	f	2025-11-24 22:07:35.578258	2025-11-25 21:37:17.124109	6	\N	approved
 60	ыыввввв	ыыввввв	["ыывввв"]	29	0	0	f	f	2025-11-25 22:14:13.024055	2025-11-26 22:05:00.482	4	\N	approved
-61	пмаыыыыыыыыыыыыыыыыыы	ыыыыыы	["аппа"]	49	2	0	f	f	2025-11-26 20:47:49.309053	2025-11-26 21:09:48.587139	6	\N	approved
+61	пмаыыыыыыыыыыыыыыыыыы	ыыыыыы	["аппа"]	51	2	0	f	f	2025-11-26 20:47:49.309053	2025-11-26 21:09:48.587139	6	\N	approved
 58	Миха гришаев	Миха ывывывывывыв	["Миха"]	15	1	0	f	f	2025-11-25 21:42:23.201795	2025-11-25 21:43:09.768067	8	\N	approved
 47	топ	топ	["топ"]	5	0	0	f	f	2025-11-19 00:07:25.712992	2025-11-19 00:07:25.712992	4	\N	approved
 46	фыы	фыфы	["фыфы"]	9	0	0	f	f	2025-11-18 23:53:22.219084	2025-11-18 23:53:22.219084	6	\N	approved
@@ -869,8 +871,8 @@ COPY public.users (id, username, email, password_hash, favorite_team, favorite_d
 10	mams	lol@gmail.com	$2a$10$DrpsClQnjJUcfbYI.O29Ae2w89VSJk1771/5JCNHE3Meh715ku1KC	Mercedes		user	active	f	f	2025-11-26 20:53:03.093169	1	2025-11-26 20:52:40.993167	\N
 11	moderator	moderator@f1forum.com	$2a$10$TvQWQNSHJoIgPYbi/2.MdO20plOtMt2.0Cqi7qSHMXTQcZkt98cQe	\N	\N	moderator	active	f	f	\N	0	2025-11-26 20:56:09.436496	\N
 8	mima	amim@gmail.ru	$2a$10$Gblt4bAFXU2QG.ZlKxg0Je80xop6TL9dvzWbsumE2yXRp6fv2WSOO	Ferrari	wdwd	user	active	f	f	2025-11-26 21:04:26.425106	11	2025-11-24 22:45:57.057933	\N
-6	mamamamamamamamama	moto@gmail.com	$2a$10$1k3bnxYynGoQFnNTBfIlNuMcCDfjhzv.jqc0PWsCBbo0U1M12CueK			moderator	active	f	f	2025-11-30 14:49:40.009632	31	2025-11-10 21:01:40.961258	\N
-4	admin	admin@f1forum.com	$2a$10$gDsRwOHx1W.aenN9EI0jh.g7kJ7R2p8B76OAZk0fRmQy4qTxJztSe	\N	\N	admin	active	t	f	2025-11-30 15:02:42.196732	74	2025-11-09 18:22:32.225715	\N
+6	mamamamamamamamama	moto@gmail.com	$2a$10$1k3bnxYynGoQFnNTBfIlNuMcCDfjhzv.jqc0PWsCBbo0U1M12CueK			moderator	active	f	f	2025-11-30 16:01:12.02856	32	2025-11-10 21:01:40.961258	\N
+4	admin	admin@f1forum.com	$2a$10$gDsRwOHx1W.aenN9EI0jh.g7kJ7R2p8B76OAZk0fRmQy4qTxJztSe	\N	\N	admin	active	t	f	2025-11-30 16:14:44.747159	80	2025-11-09 18:22:32.225715	\N
 \.
 
 
@@ -885,7 +887,7 @@ SELECT pg_catalog.setval('public.activity_logs_id_seq', 1, false);
 -- Name: backups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.backups_id_seq', 4, true);
+SELECT pg_catalog.setval('public.backups_id_seq', 6, true);
 
 
 --
@@ -906,7 +908,7 @@ SELECT pg_catalog.setval('public.comment_likes_id_seq', 98, true);
 -- Name: comments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.comments_id_seq', 134, true);
+SELECT pg_catalog.setval('public.comments_id_seq', 135, true);
 
 
 --
@@ -920,7 +922,7 @@ SELECT pg_catalog.setval('public.grand_prix_id_seq', 2, true);
 -- Name: moderator_actions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.moderator_actions_id_seq', 75, true);
+SELECT pg_catalog.setval('public.moderator_actions_id_seq', 76, true);
 
 
 --
@@ -1349,5 +1351,5 @@ ALTER TABLE ONLY public.user_warnings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GhRHOL3dHLwrr8WZhp0qtNCShkucfh3UP50nKOZGYHa4aLpKZVJeC576O9rmbaE
+\unrestrict NwCKTaMa9tCE04YTetR48IHlvhpacT3H4QUKhv6Vfeog2bxwhQao8LIX1TqsR1l
 

@@ -7,13 +7,21 @@ const app = express();
 
 // Используем простой CORS middleware
 app.use(corsMiddleware);
-
 app.use(express.json());
 
 // Логирование всех запросов
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
+});
+
+// Импортируем контроллер бэкапов
+const backupController = require('./controllers/backupController');
+
+// ПРЯМОЙ МАРШРУТ ДЛЯ СКАЧИВАНИЯ БЭКАПОВ
+app.get('/api/backup-download/:id', (req, res) => {
+    console.log('🎯 ПРЯМОЙ МАРШРУТ СКАЧИВАНИЯ! ID:', req.params.id);
+    backupController.downloadBackup(req, res);
 });
 
 // Public routes
@@ -68,5 +76,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST /api/comments`);
   console.log(`   POST /api/reports`);
   console.log(`   GET  /api/moderator/reports`);
-  console.log(`   GET  /api/moderator/reports/export/pdf`); // ДОБАВИТЬ ЭТУ СТРОКУ
+  console.log(`   GET  /api/moderator/reports/export/pdf`);
+  console.log(`   GET  /api/backup-download/:id`); // ДОБАВИЛ ЭТУ СТРОКУ
 });

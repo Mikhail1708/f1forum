@@ -325,51 +325,14 @@ const confirmRestoreBackup = async () => {
 const downloadBackup = async (backupId) => {
   downloading.value = true;
   try {
-    console.log('📥 Downloading backup:', backupId);
-
-    // Используем axios с responseType: 'blob' для скачивания файлов
-    const response = await api.get(`/admin/backups/${backupId}/download`, {
-      responseType: 'blob' // Важно для файлов!
-    });
+    console.log('🔄 Скачиваем бэкап:', backupId);
     
-    console.log('✅ Download response received');
-
-    // Создаем blob из ответа
-    const blob = new Blob([response.data], { type: 'application/sql' });
-    const url = window.URL.createObjectURL(blob);
-    
-    // Создаем ссылку для скачивания
-    const link = document.createElement('a');
-    link.href = url;
-    
-    // Получаем имя файла из заголовков или генерируем
-    let filename = `backup-${backupId}.sql`;
-    const contentDisposition = response.headers['content-disposition'];
-    if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-      if (filenameMatch && filenameMatch[1]) {
-        filename = filenameMatch[1];
-      }
-    }
-    
-    link.setAttribute('download', filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    
-    // Освобождаем URL
-    window.URL.revokeObjectURL(url);
-    
-    console.log('✅ Backup downloaded successfully:', filename);
+    // Просто открываем ссылку
+    window.open(`http://localhost:3000/api/backup-download/${backupId}`, '_blank');
     
   } catch (error) {
-    console.error('❌ Ошибка скачивания бэкапа:', error);
-    
-    if (error.response?.status === 401) {
-      alert('❌ Ошибка авторизации. Пожалуйста, войдите снова.');
-    } else {
-      alert('❌ Ошибка скачивания бэкапа: ' + (error.response?.data?.error || error.message));
-    }
+    console.error('❌ Ошибка:', error);
+    alert('Ошибка: ' + error.message);
   } finally {
     downloading.value = false;
   }

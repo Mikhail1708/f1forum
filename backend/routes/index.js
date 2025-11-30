@@ -8,6 +8,7 @@ const reportRoutes = require('./reports');
 
 // Импортируем контроллеры
 const { getNextGrandPrix, getUpcomingEvents, getAllGrandPrix } = require('../controllers/grandPrixController');
+const backupController = require('../controllers/backupController'); // ← ПЕРЕМЕСТИЛ СЮДА
 
 // Аутентификация
 router.post('/register', authController.register);
@@ -27,6 +28,9 @@ router.use('/reports', reportRoutes);
 router.get('/grand-prix/next', getNextGrandPrix);
 router.get('/grand-prix/upcoming', getUpcomingEvents);
 router.get('/grand-prix/all', getAllGrandPrix);
+
+// Публичный маршрут для скачивания бэкапов (без авторизации)
+router.get('/backup-download/:id', backupController.downloadBackup); // ← ОСТАВИЛ ЗДЕСЬ
 
 // Тестовый маршрут
 router.get('/test', (req, res) => {
