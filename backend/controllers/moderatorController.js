@@ -1,5 +1,8 @@
 // backend/controllers/moderatorController.js
 const db = require('../db/postgres');
+const Notification = require('../models/Notification');
+const ActivityLog = require('../models/ActivityLog');
+const User = require('../models/User');
 
 const moderatorController = {
     // Статистика для дашборда модератора
@@ -234,7 +237,7 @@ const moderatorController = {
         }
     },
 
-    // Выдать предупреждение пользователю
+    // Выдать предупреждение пользователю (ОБНОВЛЕННАЯ ВЕРСИЯ)
     async warnUser(req, res) {
         try {
             const { userId } = req.params;
@@ -269,20 +272,36 @@ const moderatorController = {
                 });
             }
 
-            await db.query(`
+            // Создаем предупреждение
+            const { rows } = await db.query(`
                 INSERT INTO user_warnings (user_id, moderator_id, reason)
                 VALUES ($1, $2, $3)
+                RETURNING *
             `, [userId, req.userId, reason]);
 
+            // СОЗДАЕМ УВЕДОМЛЕНИЕ ДЛЯ ПОЛЬЗОВАТЕЛЯ
+            await Notification.create({
+                user_id: userId,
+                type: 'warning',
+                title: 'Вы получили предупреждение',
+                message: `Модератор выдал вам предупреждение. Причина: ${reason}. Пожалуйста, ознакомьтесь с правилами форума.`,
+                related_entity_type: 'warning',
+                related_entity_id: rows[0].id
+            });
+
             // Логируем действие
-            await db.query(`
-                INSERT INTO moderator_actions (moderator_id, action_type, description)
-                VALUES ($1, $2, $3)
-            `, [req.userId, 'user_warned', `Выдано предупреждение пользователю #${userId}`]);
+            await ActivityLog.create({
+                user_id: req.userId,
+                action: 'user_warned',
+                description: `Выдано предупреждение пользователю #${userId}`,
+                ip_address: req.ip,
+                user_agent: req.get('User-Agent')
+            });
 
             res.json({
                 success: true,
-                message: 'User warned successfully'
+                message: 'User warned successfully',
+                data: rows[0]
             });
         } catch (error) {
             console.error('❌ Warn user error:', error);
@@ -290,10 +309,11 @@ const moderatorController = {
         }
     },
 
-    // Заблокировать пользователя
+    // Заблокировать пользователя (ОБНОВЛЕННАЯ ВЕРСИЯ)
     async suspendUser(req, res) {
         try {
             const { userId } = req.params;
+            const { reason, duration } = req.body; // duration в часах
 
             // Проверяем, не пытается ли пользователь заблокировать сам себя
             if (parseInt(userId) === req.userId) {
@@ -325,20 +345,42 @@ const moderatorController = {
                 });
             }
 
-            await db.query(
-                'UPDATE users SET status = $1 WHERE id = $2',
-                ['suspended', userId]
-            );
+            // Обновляем статус пользователя
+            await User.updateStatus(userId, 'suspended');
+
+            // Создаем уведомление для пользователя
+            let message = `Ваш аккаунт был заблокирован модератором. Причина: ${reason || 'Нарушение правил форума'}.`;
+            if (duration) {
+                const expiresAt = new Date(Date.now() + duration * 60 * 60 * 1000);
+                message += ` Блокировка действует до: ${expiresAt.toLocaleString('ru-RU')}.`;
+            }
+
+            await Notification.create({
+                user_id: userId,
+                type: 'suspension',
+                title: 'Аккаунт заблокирован',
+                message: message,
+                related_entity_type: 'user',
+                related_entity_id: userId
+            });
 
             // Логируем действие
-            await db.query(`
-                INSERT INTO moderator_actions (moderator_id, action_type, description)
-                VALUES ($1, $2, $3)
-            `, [req.userId, 'user_suspended', `Заблокирован пользователь #${userId}`]);
+            await ActivityLog.create({
+                user_id: req.userId,
+                action: 'user_suspended',
+                description: `Заблокирован пользователь #${userId}`,
+                ip_address: req.ip,
+                user_agent: req.get('User-Agent')
+            });
 
             res.json({
                 success: true,
-                message: 'User suspended successfully'
+                message: 'User suspended successfully',
+                data: {
+                    userId,
+                    reason,
+                    duration
+                }
             });
         } catch (error) {
             console.error('❌ Suspend user error:', error);
@@ -346,41 +388,49 @@ const moderatorController = {
         }
     },
 
-    // Разблокировать пользователя
+    // Разблокировать пользователя (ОБНОВЛЕННАЯ ВЕРСИЯ)
     async unsuspendUser(req, res) {
         try {
             const { userId } = req.params;
 
             // Проверяем, существует ли пользователь
-            const targetUser = await db.query(
-                'SELECT role, status FROM users WHERE id = $1',
-                [userId]
-            );
+            const targetUser = await User.findById(userId);
 
-            if (targetUser.rows.length === 0) {
+            if (!targetUser) {
                 return res.status(404).json({ 
                     success: false, 
                     error: 'User not found' 
                 });
             }
 
-            if (targetUser.rows[0].status !== 'suspended') {
+            if (targetUser.status !== 'suspended') {
                 return res.status(400).json({ 
                     success: false, 
                     error: 'User is not suspended' 
                 });
             }
 
-            await db.query(
-                'UPDATE users SET status = $1 WHERE id = $2',
-                ['active', userId]
-            );
+            // Разблокируем пользователя
+            await User.updateStatus(userId, 'active');
+
+            // Создаем уведомление для пользователя
+            await Notification.create({
+                user_id: userId,
+                type: 'unsuspension',
+                title: 'Аккаунт разблокирован',
+                message: 'Ваш аккаунт был разблокирован модератором. Теперь вы можете снова участвовать в обсуждениях.',
+                related_entity_type: 'user',
+                related_entity_id: userId
+            });
 
             // Логируем действие
-            await db.query(`
-                INSERT INTO moderator_actions (moderator_id, action_type, description)
-                VALUES ($1, $2, $3)
-            `, [req.userId, 'user_unsuspended', `Разблокирован пользователь #${userId}`]);
+            await ActivityLog.create({
+                user_id: req.userId,
+                action: 'user_unsuspended',
+                description: `Разблокирован пользователь #${userId}`,
+                ip_address: req.ip,
+                user_agent: req.get('User-Agent')
+            });
 
             res.json({
                 success: true,
@@ -657,129 +707,128 @@ const moderatorController = {
         }
     },
 
-    // moderatorController.js - исправленная функция
-async updateReportResolution(req, res) {
-    try {
-        const { reportId } = req.params;
-        const { status, resolution, moderator_notes } = req.body;
-        const moderator_id = req.userId;
+    // Обновить решение по жалобе
+    async updateReportResolution(req, res) {
+        try {
+            const { reportId } = req.params;
+            const { status, resolution, moderator_notes } = req.body;
+            const moderator_id = req.userId;
 
-        console.log('🔄 Updating report resolution:', { reportId, status, resolution });
+            console.log('🔄 Updating report resolution:', { reportId, status, resolution });
 
-        const report = await db.query(
-            'SELECT * FROM reports WHERE id = $1',
-            [reportId]
-        );
+            const report = await db.query(
+                'SELECT * FROM reports WHERE id = $1',
+                [reportId]
+            );
 
-        if (report.rows.length === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                error: 'Жалоба не найдена' 
-            });
-        }
-
-        // ИСПРАВЛЕНИЕ: явно указываем типы параметров
-        await db.query(`
-            UPDATE reports 
-            SET status = $1::text,
-                resolution = $2::text,
-                moderator_notes = $3::text,
-                moderator_id = $4,
-                resolved_at = CASE 
-                    WHEN $1::text = 'pending' THEN NULL 
-                    ELSE COALESCE(resolved_at, NOW()) 
-                END
-            WHERE id = $5
-        `, [status, resolution, moderator_notes, moderator_id, reportId]);
-
-        // Логируем изменение
-        const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
-        const description = status === 'pending' 
-            ? `Переоткрыта жалоба #${reportId}` 
-            : `Обновлено решение по жалобе #${reportId}`;
-
-        await db.query(`
-            INSERT INTO moderator_actions (moderator_id, action_type, description)
-            VALUES ($1, $2, $3)
-        `, [moderator_id, actionType, description]);
-
-        res.json({
-            success: true,
-            message: 'Решение по жалобе обновлено'
-        });
-    } catch (error) {
-        console.error('❌ Update report resolution error:', error);
-        
-        // Альтернативная попытка без явного приведения типов
-        if (error.message.includes('inconsistent types')) {
-            try {
-                console.log('🔄 Retrying without type casting...');
-                
-                const { reportId } = req.params;
-                const { status, resolution, moderator_notes } = req.body;
-                const moderator_id = req.userId;
-
-                const report = await db.query(
-                    'SELECT * FROM reports WHERE id = $1',
-                    [reportId]
-                );
-
-                if (report.rows.length === 0) {
-                    return res.status(404).json({ 
-                        success: false, 
-                        error: 'Жалоба не найдена' 
-                    });
-                }
-
-                // Простая версия без приведения типов
-                await db.query(`
-                    UPDATE reports 
-                    SET status = $1,
-                        resolution = $2,
-                        moderator_notes = $3,
-                        moderator_id = $4,
-                        resolved_at = CASE 
-                            WHEN $1 = 'pending' THEN NULL 
-                            ELSE COALESCE(resolved_at, NOW()) 
-                        END
-                    WHERE id = $5
-                `, [status, resolution, moderator_notes, moderator_id, reportId]);
-
-                // Логируем изменение
-                const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
-                const description = status === 'pending' 
-                    ? `Переоткрыта жалоба #${reportId}` 
-                    : `Обновлено решение по жалобе #${reportId}`;
-
-                await db.query(`
-                    INSERT INTO moderator_actions (moderator_id, action_type, description)
-                    VALUES ($1, $2, $3)
-                `, [moderator_id, actionType, description]);
-
-                res.json({
-                    success: true,
-                    message: 'Решение по жалобе обновлено'
-                });
-                
-            } catch (retryError) {
-                console.error('❌ Retry also failed:', retryError);
-                res.status(500).json({ 
+            if (report.rows.length === 0) {
+                return res.status(404).json({ 
                     success: false, 
-                    error: 'Ошибка базы данных: ' + retryError.message 
+                    error: 'Жалоба не найдена' 
                 });
             }
-        } else {
-            res.status(500).json({ 
-                success: false, 
-                error: 'Внутренняя ошибка сервера: ' + error.message 
-            });
-        }
-    }
-},
-    
-// moderatorController.js - ДОБАВЛЯЕМ В КОНЕЦ ФАЙЛА
 
-// Функция для обработки жалоб (альтернатива из reportController)
+            // ИСПРАВЛЕНИЕ: явно указываем типы параметров
+            await db.query(`
+                UPDATE reports 
+                SET status = $1::text,
+                    resolution = $2::text,
+                    moderator_notes = $3::text,
+                    moderator_id = $4,
+                    resolved_at = CASE 
+                        WHEN $1::text = 'pending' THEN NULL 
+                        ELSE COALESCE(resolved_at, NOW()) 
+                    END
+                WHERE id = $5
+            `, [status, resolution, moderator_notes, moderator_id, reportId]);
+
+            // Логируем изменение
+            const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
+            const description = status === 'pending' 
+                ? `Переоткрыта жалоба #${reportId}` 
+                : `Обновлено решение по жалобе #${reportId}`;
+
+            await db.query(`
+                INSERT INTO moderator_actions (moderator_id, action_type, description)
+                VALUES ($1, $2, $3)
+            `, [moderator_id, actionType, description]);
+
+            res.json({
+                success: true,
+                message: 'Решение по жалобе обновлено'
+            });
+        } catch (error) {
+            console.error('❌ Update report resolution error:', error);
+            
+            // Альтернативная попытка без явного приведения типов
+            if (error.message.includes('inconsistent types')) {
+                try {
+                    console.log('🔄 Retrying without type casting...');
+                    
+                    const { reportId } = req.params;
+                    const { status, resolution, moderator_notes } = req.body;
+                    const moderator_id = req.userId;
+
+                    const report = await db.query(
+                        'SELECT * FROM reports WHERE id = $1',
+                        [reportId]
+                    );
+
+                    if (report.rows.length === 0) {
+                        return res.status(404).json({ 
+                            success: false, 
+                            error: 'Жалоба не найдена' 
+                        });
+                    }
+
+                    // Простая версия без приведения типов
+                    await db.query(`
+                        UPDATE reports 
+                        SET status = $1,
+                            resolution = $2,
+                            moderator_notes = $3,
+                            moderator_id = $4,
+                            resolved_at = CASE 
+                                WHEN $1 = 'pending' THEN NULL 
+                                ELSE COALESCE(resolved_at, NOW()) 
+                            END
+                        WHERE id = $5
+                    `, [status, resolution, moderator_notes, moderator_id, reportId]);
+
+                    // Логируем изменение
+                    const actionType = status === 'pending' ? 'report_reopened' : 'report_updated';
+                    const description = status === 'pending' 
+                        ? `Переоткрыта жалоба #${reportId}` 
+                        : `Обновлено решение по жалобе #${reportId}`;
+
+                    await db.query(`
+                        INSERT INTO moderator_actions (moderator_id, action_type, description)
+                        VALUES ($1, $2, $3)
+                    `, [moderator_id, actionType, description]);
+
+                    res.json({
+                        success: true,
+                        message: 'Решение по жалобе обновлено'
+                    });
+                    
+                } catch (retryError) {
+                    console.error('❌ Retry also failed:', retryError);
+                    res.status(500).json({ 
+                        success: false, 
+                        error: 'Ошибка базы данных: ' + retryError.message 
+                    });
+                }
+            } else {
+                res.status(500).json({ 
+                    success: false, 
+                    error: 'Внутренняя ошибка сервера: ' + error.message 
+                });
+            }
+        }
+    },
+    
+    // backend/controllers/moderatorController.js - ДОБАВИМ ПРОПУЩЕННЫЙ МЕТОД
+// Функция для обработки жалоб (resolve)
 async resolveReport(req, res) {
     try {
         const { reportId } = req.params;
@@ -838,6 +887,12 @@ async resolveReport(req, res) {
                 resolved_at = NOW()
             WHERE id = $4
         `, [resolution, moderator_id, moderator_notes || null, reportId]);
+
+        // Логируем действие
+        await db.query(`
+            INSERT INTO moderator_actions (moderator_id, action_type, description)
+            VALUES ($1, $2, $3)
+        `, [moderator_id, 'report_resolved', `Обработана жалоба #${reportId}`]);
 
         console.log('✅ Report resolved:', reportId);
 
@@ -914,4 +969,5 @@ async resolveReport(req, res) {
     }
 }
 }
+
 module.exports = moderatorController;

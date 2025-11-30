@@ -1,3 +1,4 @@
+<!-- frontend/src/components/NavBar.vue (обновленная версия) -->
 <template>
   <nav class="navbar">
     <div class="nav-container">
@@ -12,9 +13,20 @@
         <router-link to="/constructors" class="nav-link">Команды</router-link>
         <router-link to="/circuits" class="nav-link">Трассы</router-link>
         <router-link to="/races" class="nav-link">Гонки</router-link>
-        <router-link v-if="authStore.user?.role === 'moderator' || authStore.user?.role === 'admin'" to="/moderator/dashboard"  class="nav-link moderator-link">🛡️ Модерация</router-link>
+        
         <template v-if="authStore.isAuthenticated">
-          <router-link v-if="isAdmin" to="/admin" class="nav-link admin-link">⚙️ Админка</router-link>
+          <!-- Компонент уведомлений -->
+          <NotificationBell />
+          
+          <router-link v-if="authStore.user?.role === 'moderator' || authStore.user?.role === 'admin'" 
+                       to="/moderator/dashboard" class="nav-link moderator-link">
+            🛡️ Модерация
+          </router-link>
+          
+          <router-link v-if="authStore.isAdmin" to="/admin" class="nav-link admin-link">
+            ⚙️ Админка
+          </router-link>
+          
           <router-link to="/profile" class="nav-link">Профиль</router-link>
           <span class="user-greeting">Привет, {{ authStore.user?.username }}</span>
           <button @click="handleLogout" class="logout-btn">Выйти</button>
@@ -33,6 +45,7 @@
 import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
 import { computed } from 'vue';
+import NotificationBell from './NotificationBell.vue';
 
 const authStore = useAuthStore();
 const router = useRouter();

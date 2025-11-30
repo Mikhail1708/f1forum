@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict NwCKTaMa9tCE04YTetR48IHlvhpacT3H4QUKhv6Vfeog2bxwhQao8LIX1TqsR1l
+\restrict NIw0FlmwJ2BFK9y8ZPCIN6gZk9kc5ertvbXb8uSu8JzXbPGcDMWG7nNtDKjvlCt
 
 -- Dumped from database version 18.0
 -- Dumped by pg_dump version 18.0
@@ -216,6 +216,44 @@ ALTER SEQUENCE public.comments_id_seq OWNED BY public.comments.id;
 
 
 --
+-- Name: email_verification_tokens; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.email_verification_tokens (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    token character varying(255) NOT NULL,
+    expires_at timestamp without time zone NOT NULL,
+    used boolean DEFAULT false,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.email_verification_tokens OWNER TO postgres;
+
+--
+-- Name: email_verification_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.email_verification_tokens_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.email_verification_tokens_id_seq OWNER TO postgres;
+
+--
+-- Name: email_verification_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.email_verification_tokens_id_seq OWNED BY public.email_verification_tokens.id;
+
+
+--
 -- Name: grand_prix; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -289,6 +327,86 @@ ALTER SEQUENCE public.moderator_actions_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.moderator_actions_id_seq OWNED BY public.moderator_actions.id;
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.notifications (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    type character varying(50) NOT NULL,
+    title character varying(255) NOT NULL,
+    message text NOT NULL,
+    related_entity_type character varying(50),
+    related_entity_id integer,
+    is_read boolean DEFAULT false,
+    read_at timestamp without time zone,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.notifications OWNER TO postgres;
+
+--
+-- Name: notifications_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.notifications_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.notifications_id_seq OWNER TO postgres;
+
+--
+-- Name: notifications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.notifications_id_seq OWNED BY public.notifications.id;
+
+
+--
+-- Name: password_reset_tokens; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.password_reset_tokens (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    token character varying(255) NOT NULL,
+    expires_at timestamp without time zone NOT NULL,
+    used boolean DEFAULT false,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.password_reset_tokens OWNER TO postgres;
+
+--
+-- Name: password_reset_tokens_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.password_reset_tokens_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.password_reset_tokens_id_seq OWNER TO postgres;
+
+--
+-- Name: password_reset_tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.password_reset_tokens_id_seq OWNED BY public.password_reset_tokens.id;
 
 
 --
@@ -512,7 +630,8 @@ CREATE TABLE public.users (
     last_login timestamp without time zone,
     login_count integer DEFAULT 0,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    avatar_url character varying(255)
+    avatar_url character varying(255),
+    email_verified boolean DEFAULT false
 );
 
 
@@ -576,6 +695,13 @@ ALTER TABLE ONLY public.comments ALTER COLUMN id SET DEFAULT nextval('public.com
 
 
 --
+-- Name: email_verification_tokens id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.email_verification_tokens ALTER COLUMN id SET DEFAULT nextval('public.email_verification_tokens_id_seq'::regclass);
+
+
+--
 -- Name: grand_prix id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -587,6 +713,20 @@ ALTER TABLE ONLY public.grand_prix ALTER COLUMN id SET DEFAULT nextval('public.g
 --
 
 ALTER TABLE ONLY public.moderator_actions ALTER COLUMN id SET DEFAULT nextval('public.moderator_actions_id_seq'::regclass);
+
+
+--
+-- Name: notifications id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications ALTER COLUMN id SET DEFAULT nextval('public.notifications_id_seq'::regclass);
+
+
+--
+-- Name: password_reset_tokens id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.password_reset_tokens ALTER COLUMN id SET DEFAULT nextval('public.password_reset_tokens_id_seq'::regclass);
 
 
 --
@@ -636,6 +776,18 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 --
 
 COPY public.activity_logs (id, user_id, action, description, ip_address, user_agent, created_at) FROM stdin;
+1	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:01:43.509207
+2	6	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:09:03.74957
+3	8	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:09:10.859853
+4	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:09:31.500427
+5	6	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:13:57.597942
+6	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:17:09.462
+7	4	user_suspended	Заблокирован пользователь #10	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:17:30.332094
+8	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:17:53.069471
+9	4	user_unsuspended	Разблокирован пользователь #10	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:18:07.179461
+10	4	user_suspended	Заблокирован пользователь #6	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:18:17.275317
+11	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:18:32.910356
+12	4	user_unsuspended	Разблокирован пользователь #6	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:18:43.92874
 \.
 
 
@@ -689,6 +841,14 @@ COPY public.comments (id, content, likes, user_id, parent_id, created_at, update
 131	ввв	0	4	130	2025-11-26 21:56:53.891295	2025-11-26 21:56:53.891295	61	approved
 132	ввввв	0	4	\N	2025-11-26 21:59:18.637067	2025-11-26 21:59:18.637067	58	approved
 133	ывывывывывывыв	1	4	122	2025-11-26 22:04:40.429189	2025-11-26 22:04:53.796347	60	approved
+\.
+
+
+--
+-- Data for Name: email_verification_tokens; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.email_verification_tokens (id, user_id, token, expires_at, used, created_at) FROM stdin;
 \.
 
 
@@ -783,6 +943,29 @@ COPY public.moderator_actions (id, moderator_id, action_type, description, creat
 74	4	comment_approved	Одобрен комментарий #133	2025-11-26 22:05:31.921113
 75	6	comment_approved	Одобрен комментарий #134	2025-11-30 14:49:45.814951
 76	4	comment_approved	Одобрен комментарий #135	2025-11-30 15:59:42.665844
+77	4	topic_approved	Одобрена тема #62	2025-11-30 21:02:59.605226
+78	4	report_resolved	Обработана жалоба #16	2025-11-30 21:13:49.183823
+79	6	report_resolved	Обработана жалоба #17	2025-11-30 21:15:12.958457
+\.
+
+
+--
+-- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, is_read, read_at, created_at) FROM stdin;
+1	10	suspension	Аккаунт заблокирован	Ваш аккаунт был заблокирован модератором. Причина: Нарушение правил форума.	user	10	f	\N	2025-11-30 21:17:30.328086
+2	10	unsuspension	Аккаунт разблокирован	Ваш аккаунт был разблокирован модератором. Теперь вы можете снова участвовать в обсуждениях.	user	10	f	\N	2025-11-30 21:18:07.178593
+3	6	suspension	Аккаунт заблокирован	Ваш аккаунт был заблокирован модератором. Причина: Нарушение правил форума.	user	6	f	\N	2025-11-30 21:18:17.274558
+4	6	unsuspension	Аккаунт разблокирован	Ваш аккаунт был разблокирован модератором. Теперь вы можете снова участвовать в обсуждениях.	user	6	f	\N	2025-11-30 21:18:43.928083
+\.
+
+
+--
+-- Data for Name: password_reset_tokens; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.password_reset_tokens (id, user_id, token, expires_at, used, created_at) FROM stdin;
 \.
 
 
@@ -813,6 +996,8 @@ COPY public.reports (id, reporter_id, author_id, content_type, content_id, reaso
 14	4	6	comment	129	ааааа	comment	resolved	Комментарий удален	4	2025-11-26 21:58:41.855748	2025-11-26 21:57:00.300367	Быстрое решение: удалить контент
 15	4	8	comment	126	цу	comment	resolved	Комментарий удален	4	2025-11-26 21:58:59.638227	2025-11-26 21:58:50.890775	Быстрое решение: удалить контент
 12	4	10	comment	124	Спам	comment	resolved	Пользователю выдано предупреждение	4	2025-11-26 22:07:21.420033	2025-11-26 21:36:03.89946	Быстрое решение: предупредить пользователя
+16	4	6	comment	134	Спам	comment	resolved	Пользователю выдано предупреждение	4	2025-11-30 21:13:49.183286	2025-11-30 21:09:59.044075	Быстрое решение: предупредить пользователя
+17	6	10	comment	124	спам	comment	resolved	Пользователю выдано предупреждение	6	2025-11-30 21:15:12.957996	2025-11-30 21:15:04.377451	Быстрое решение: предупредить пользователя
 \.
 
 
@@ -825,7 +1010,7 @@ COPY public.topic_likes (id, topic_id, user_id, created_at) FROM stdin;
 67	58	8	2025-11-25 21:44:50.833375
 68	61	10	2025-11-26 20:53:22.135345
 73	51	4	2025-11-26 22:05:19.337245
-76	61	4	2025-11-28 20:29:18.79969
+77	61	4	2025-11-30 16:47:27.914133
 \.
 
 
@@ -837,11 +1022,12 @@ COPY public.topics (id, title, content, tags, views, likes, comments_count, is_p
 51	ура	работает	["эта"]	11	1	0	f	f	2025-11-20 22:35:48.215874	2025-11-20 22:35:48.215874	4	\N	approved
 54	аааввввввввввввв	аааввввввв	["ааа"]	34	1	0	f	f	2025-11-24 22:07:35.578258	2025-11-25 21:37:17.124109	6	\N	approved
 60	ыыввввв	ыыввввв	["ыывввв"]	29	0	0	f	f	2025-11-25 22:14:13.024055	2025-11-26 22:05:00.482	4	\N	approved
-61	пмаыыыыыыыыыыыыыыыыыы	ыыыыыы	["аппа"]	51	2	0	f	f	2025-11-26 20:47:49.309053	2025-11-26 21:09:48.587139	6	\N	approved
 58	Миха гришаев	Миха ывывывывывыв	["Миха"]	15	1	0	f	f	2025-11-25 21:42:23.201795	2025-11-25 21:43:09.768067	8	\N	approved
 47	топ	топ	["топ"]	5	0	0	f	f	2025-11-19 00:07:25.712992	2025-11-19 00:07:25.712992	4	\N	approved
 46	фыы	фыфы	["фыфы"]	9	0	0	f	f	2025-11-18 23:53:22.219084	2025-11-18 23:53:22.219084	6	\N	approved
 59	п	п	["п"]	0	0	0	f	f	2025-11-25 21:49:02.365385	2025-11-25 21:49:02.365385	8	\N	rejected
+62	мика	ккк	["ккк"]	1	0	0	f	f	2025-11-30 21:02:55.087148	2025-11-30 21:02:55.087148	4	\N	approved
+61	пмаыыыыыыыыыыыыыыыыыы	ыыыыыы	["аппа"]	55	2	0	f	f	2025-11-26 20:47:49.309053	2025-11-26 21:09:48.587139	6	\N	approved
 48	ыыыыыыыы	ыыы	["{\\"ы\\"}"]	1	0	0	f	f	2025-11-20 21:29:53.528334	2025-11-26 21:10:14.363538	6	\N	approved
 45	ййй	йййййййййй	["йййй"]	6	0	0	f	f	2025-11-18 19:59:26.826334	2025-11-18 19:59:26.826334	6	\N	approved
 53	Мото мото	мото	["тото"]	8	0	0	f	f	2025-11-24 21:50:44.234784	2025-11-24 21:50:44.234784	6	\N	approved
@@ -860,6 +1046,8 @@ COPY public.user_warnings (id, user_id, moderator_id, reason, expires_at, create
 6	4	4	Жалоба #7: Быстрое решение: предупредить пользователя	\N	2025-11-26 21:43:13.242469
 7	4	4	Жалоба #8: Быстрое решение: предупредить пользователя	\N	2025-11-26 21:45:49.793642
 8	10	4	Жалоба #12: Быстрое решение: предупредить пользователя	\N	2025-11-26 22:07:21.4191
+9	6	4	Жалоба #16: Быстрое решение: предупредить пользователя	\N	2025-11-30 21:13:49.180966
+10	10	6	Жалоба #17: Быстрое решение: предупредить пользователя	\N	2025-11-30 21:15:12.957151
 \.
 
 
@@ -867,12 +1055,12 @@ COPY public.user_warnings (id, user_id, moderator_id, reason, expires_at, create
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.users (id, username, email, password_hash, favorite_team, favorite_driver, role, status, is_moderator, is_banned, last_login, login_count, created_at, avatar_url) FROM stdin;
-10	mams	lol@gmail.com	$2a$10$DrpsClQnjJUcfbYI.O29Ae2w89VSJk1771/5JCNHE3Meh715ku1KC	Mercedes		user	active	f	f	2025-11-26 20:53:03.093169	1	2025-11-26 20:52:40.993167	\N
-11	moderator	moderator@f1forum.com	$2a$10$TvQWQNSHJoIgPYbi/2.MdO20plOtMt2.0Cqi7qSHMXTQcZkt98cQe	\N	\N	moderator	active	f	f	\N	0	2025-11-26 20:56:09.436496	\N
-8	mima	amim@gmail.ru	$2a$10$Gblt4bAFXU2QG.ZlKxg0Je80xop6TL9dvzWbsumE2yXRp6fv2WSOO	Ferrari	wdwd	user	active	f	f	2025-11-26 21:04:26.425106	11	2025-11-24 22:45:57.057933	\N
-6	mamamamamamamamama	moto@gmail.com	$2a$10$1k3bnxYynGoQFnNTBfIlNuMcCDfjhzv.jqc0PWsCBbo0U1M12CueK			moderator	active	f	f	2025-11-30 16:01:12.02856	32	2025-11-10 21:01:40.961258	\N
-4	admin	admin@f1forum.com	$2a$10$gDsRwOHx1W.aenN9EI0jh.g7kJ7R2p8B76OAZk0fRmQy4qTxJztSe	\N	\N	admin	active	t	f	2025-11-30 16:14:44.747159	80	2025-11-09 18:22:32.225715	\N
+COPY public.users (id, username, email, password_hash, favorite_team, favorite_driver, role, status, is_moderator, is_banned, last_login, login_count, created_at, avatar_url, email_verified) FROM stdin;
+11	moderator	moderator@f1forum.com	$2a$10$TvQWQNSHJoIgPYbi/2.MdO20plOtMt2.0Cqi7qSHMXTQcZkt98cQe	\N	\N	moderator	active	f	f	\N	0	2025-11-26 20:56:09.436496	\N	f
+10	mams	lol@gmail.com	$2a$10$DrpsClQnjJUcfbYI.O29Ae2w89VSJk1771/5JCNHE3Meh715ku1KC	Mercedes		user	active	f	f	2025-11-26 20:53:03.093169	1	2025-11-26 20:52:40.993167	\N	f
+4	admin	admin@f1forum.com	$2a$10$gDsRwOHx1W.aenN9EI0jh.g7kJ7R2p8B76OAZk0fRmQy4qTxJztSe	Ferrari	Чарльз Леклер	admin	active	t	f	2025-11-30 21:18:32.909353	86	2025-11-09 18:22:32.225715	\N	t
+6	vovchikKrasaychek	moto@gmail.com	$2a$10$1k3bnxYynGoQFnNTBfIlNuMcCDfjhzv.jqc0PWsCBbo0U1M12CueK	Red Bull		moderator	active	f	f	2025-11-30 21:13:57.596285	34	2025-11-10 21:01:40.961258	\N	t
+8	mima	amim@gmail.ru	$2a$10$Gblt4bAFXU2QG.ZlKxg0Je80xop6TL9dvzWbsumE2yXRp6fv2WSOO	Ferrari	wdwd	user	active	f	f	2025-11-30 21:09:10.858827	12	2025-11-24 22:45:57.057933	\N	f
 \.
 
 
@@ -880,14 +1068,14 @@ COPY public.users (id, username, email, password_hash, favorite_team, favorite_d
 -- Name: activity_logs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.activity_logs_id_seq', 1, false);
+SELECT pg_catalog.setval('public.activity_logs_id_seq', 12, true);
 
 
 --
 -- Name: backups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.backups_id_seq', 6, true);
+SELECT pg_catalog.setval('public.backups_id_seq', 9, true);
 
 
 --
@@ -912,6 +1100,13 @@ SELECT pg_catalog.setval('public.comments_id_seq', 135, true);
 
 
 --
+-- Name: email_verification_tokens_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.email_verification_tokens_id_seq', 1, false);
+
+
+--
 -- Name: grand_prix_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
@@ -922,7 +1117,21 @@ SELECT pg_catalog.setval('public.grand_prix_id_seq', 2, true);
 -- Name: moderator_actions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.moderator_actions_id_seq', 76, true);
+SELECT pg_catalog.setval('public.moderator_actions_id_seq', 79, true);
+
+
+--
+-- Name: notifications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.notifications_id_seq', 4, true);
+
+
+--
+-- Name: password_reset_tokens_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.password_reset_tokens_id_seq', 1, false);
 
 
 --
@@ -936,28 +1145,28 @@ SELECT pg_catalog.setval('public.report_notes_id_seq', 1, false);
 -- Name: reports_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.reports_id_seq', 15, true);
+SELECT pg_catalog.setval('public.reports_id_seq', 17, true);
 
 
 --
 -- Name: topic_likes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.topic_likes_id_seq', 76, true);
+SELECT pg_catalog.setval('public.topic_likes_id_seq', 77, true);
 
 
 --
 -- Name: topics_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.topics_id_seq', 61, true);
+SELECT pg_catalog.setval('public.topics_id_seq', 62, true);
 
 
 --
 -- Name: user_warnings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.user_warnings_id_seq', 8, true);
+SELECT pg_catalog.setval('public.user_warnings_id_seq', 10, true);
 
 
 --
@@ -1024,6 +1233,14 @@ ALTER TABLE ONLY public.comments
 
 
 --
+-- Name: email_verification_tokens email_verification_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.email_verification_tokens
+    ADD CONSTRAINT email_verification_tokens_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: grand_prix grand_prix_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1037,6 +1254,22 @@ ALTER TABLE ONLY public.grand_prix
 
 ALTER TABLE ONLY public.moderator_actions
     ADD CONSTRAINT moderator_actions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_pkey PRIMARY KEY (id);
 
 
 --
@@ -1133,10 +1366,59 @@ CREATE INDEX idx_comments_status ON public.comments USING btree (status);
 
 
 --
+-- Name: idx_email_tokens_token; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_email_tokens_token ON public.email_verification_tokens USING btree (token);
+
+
+--
+-- Name: idx_email_tokens_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_email_tokens_user_id ON public.email_verification_tokens USING btree (user_id);
+
+
+--
 -- Name: idx_moderator_actions_moderator; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_moderator_actions_moderator ON public.moderator_actions USING btree (moderator_id);
+
+
+--
+-- Name: idx_notifications_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_created_at ON public.notifications USING btree (created_at);
+
+
+--
+-- Name: idx_notifications_is_read; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_is_read ON public.notifications USING btree (is_read);
+
+
+--
+-- Name: idx_notifications_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_notifications_user_id ON public.notifications USING btree (user_id);
+
+
+--
+-- Name: idx_password_tokens_token; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_password_tokens_token ON public.password_reset_tokens USING btree (token);
+
+
+--
+-- Name: idx_password_tokens_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_password_tokens_user_id ON public.password_reset_tokens USING btree (user_id);
 
 
 --
@@ -1252,11 +1534,35 @@ ALTER TABLE ONLY public.comments
 
 
 --
+-- Name: email_verification_tokens email_verification_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.email_verification_tokens
+    ADD CONSTRAINT email_verification_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: moderator_actions moderator_actions_moderator_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.moderator_actions
     ADD CONSTRAINT moderator_actions_moderator_id_fkey FOREIGN KEY (moderator_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: notifications notifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: password_reset_tokens password_reset_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.password_reset_tokens
+    ADD CONSTRAINT password_reset_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1351,5 +1657,5 @@ ALTER TABLE ONLY public.user_warnings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict NwCKTaMa9tCE04YTetR48IHlvhpacT3H4QUKhv6Vfeog2bxwhQao8LIX1TqsR1l
+\unrestrict NIw0FlmwJ2BFK9y8ZPCIN6gZk9kc5ertvbXb8uSu8JzXbPGcDMWG7nNtDKjvlCt
 

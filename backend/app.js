@@ -30,6 +30,9 @@ app.use('/api/topics', require('./routes/topics'));
 app.use('/api/comments', require('./routes/comments'));
 app.use('/api/reports', require('./routes/reports'));
 
+// НОВЫЙ МАРШРУТ ПРОФИЛЯ
+app.use('/api/profile', auth, require('./routes/profile'));
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -77,5 +80,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST /api/reports`);
   console.log(`   GET  /api/moderator/reports`);
   console.log(`   GET  /api/moderator/reports/export/pdf`);
-  console.log(`   GET  /api/backup-download/:id`); // ДОБАВИЛ ЭТУ СТРОКУ
+  console.log(`   GET  /api/backup-download/:id`);
+  console.log(`   GET  /api/profile`); // НОВЫЙ МАРШРУТ
+  console.log(`   PUT  /api/profile`); // НОВЫЙ МАРШРУТ
+  console.log(`   POST /api/profile/change-password`); // НОВЫЙ МАРШРУТ
 });

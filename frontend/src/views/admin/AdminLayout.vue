@@ -1,8 +1,15 @@
+<!-- frontend/src/views/admin/AdminLayout.vue -->
 <template>
   <div class="admin-layout">
     <header class="admin-header">
       <div class="header-left">
         <h1>🏎️ F1 Forum Admin</h1>
+        <!-- ОТЛАДОЧНАЯ ИНФОРМАЦИЯ -->
+        <div class="debug-info">
+          <small>Route: {{ $route.path }}</small>
+          <small>User: {{ authStore.user?.username }} ({{ authStore.user?.role }})</small>
+          <small>isAdmin: {{ authStore.isAdmin }}</small>
+        </div>
       </div>
       <div class="header-right">
         <span>Привет, {{ authStore.user?.username }}</span>
@@ -13,17 +20,15 @@
     <div class="admin-container">
       <aside class="admin-sidebar">
         <nav class="sidebar-nav">
-          <router-link to="/admin/dashboard" class="nav-item">
+          <router-link to="/admin/dashboard" class="nav-item" @click="forceNavigation('/admin/dashboard')">
             📊 Дашборд
           </router-link>
-          <router-link to="/admin/users" class="nav-item">
+          <router-link to="/admin/users" class="nav-item" @click="forceNavigation('/admin/users')">
             👥 Пользователи
           </router-link>
-         
-          <router-link to="/admin/backups" class="nav-item">
+          <router-link to="/admin/backups" class="nav-item" @click="forceNavigation('/admin/backups')">
             💾 Бэкапы
           </router-link>
-          
         </nav>
       </aside>
 
@@ -35,11 +40,34 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue';
 import { useAuthStore } from '../../stores/auth';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
+
+// ПРИНУДИТЕЛЬНАЯ НАВИГАЦИЯ
+const forceNavigation = (path) => {
+  console.log('🔄 Force navigation to:', path);
+  event.preventDefault(); // Предотвращаем стандартное поведение
+  router.push(path)
+    .then(() => {
+      console.log('✅ Navigation successful to:', path);
+    })
+    .catch((error) => {
+      console.error('❌ Navigation failed:', error);
+    });
+};
+
+onMounted(() => {
+  console.log('🔐 AdminLayout mounted', {
+    user: authStore.user,
+    isAdmin: authStore.isAdmin,
+    currentRoute: route.path
+  });
+});
 
 const logout = () => {
   authStore.logout();
@@ -48,6 +76,15 @@ const logout = () => {
 </script>
 
 <style scoped>
+.debug-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.7rem;
+  color: #bdc3c7;
+  margin-top: 5px;
+}
+
 .admin-layout {
   min-height: 100vh;
   background: #f5f5f5;
@@ -105,6 +142,7 @@ const logout = () => {
   text-decoration: none;
   border-left: 4px solid transparent;
   transition: all 0.3s;
+  cursor: pointer;
 }
 
 .nav-item:hover {

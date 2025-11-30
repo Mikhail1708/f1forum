@@ -1,3 +1,4 @@
+// backend/routes/moderator.js
 const express = require('express');
 const router = express.Router();
 const moderatorController = require('../controllers/moderatorController');
@@ -29,10 +30,12 @@ router.post('/users/:userId/suspend', moderatorController.suspendUser);
 router.post('/users/:userId/unsuspend', moderatorController.unsuspendUser);
 
 // Управление жалобами
-router.get('/reports', reportController.getReports);
+router.get('/reports', moderatorController.getReports);
 router.get('/reports/stats', moderatorController.getReportsStats);
 router.get('/reports/:reportId', moderatorController.getReportDetails);
-router.post('/reports/:reportId/resolve', reportController.resolveReport);
+
+// ИСПРАВЛЕНИЕ: Добавляем недостающие маршруты для resolve
+router.post('/reports/:reportId/resolve', moderatorController.resolveReport);
 router.put('/reports/:reportId/resolution', moderatorController.updateReportResolution);
 router.post('/reports/:reportId/notes', moderatorController.addReportNote);
 router.delete('/reports/notes/:noteId', moderatorController.deleteReportNote);

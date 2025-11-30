@@ -8,19 +8,10 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
-import { useAuthStore } from './stores/auth';
+
 import NavBar from './components/NavBar.vue';
 
-const authStore = useAuthStore();
 
-// При загрузке приложения пытаемся получить профиль пользователя, если есть токен
-onMounted(async () => {
-  // Проверяем аутентификацию при загрузке приложения
-  if (authStore.token && !authStore.isAuthenticated) {
-    await authStore.checkAuth();
-  }
-});
 </script>
 
 <style>

@@ -5,6 +5,7 @@ import { useDiscussionsStore } from '../stores/discussionsStore'
 
 const routes = [
   // Публичные маршруты
+  
   {
     path: '/',
     name: 'home',
@@ -163,9 +164,20 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   const discussionsStore = useDiscussionsStore()
   
+  console.log('🛡️ Router guard START:', {
+    to: to.path,
+    from: from.path,
+    requiresAuth: to.meta.requiresAuth,
+    requiresAdmin: to.meta.requiresAdmin,
+    user: authStore.user,
+    isAuthenticated: authStore.isAuthenticated,
+    isAdmin: authStore.isAdmin
+  })
+
   // Проверяем аутентификацию только если есть токен
   if (authStore.token && !authStore.isAuthenticated) {
     try {
+      console.log('🔄 Checking auth...')
       await authStore.checkAuth()
     } catch (error) {
       console.error('Auth check failed:', error)
@@ -179,12 +191,18 @@ router.beforeEach(async (to, from, next) => {
 
   // Проверка авторизации для защищенных маршрутов
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    console.log('❌ Requires auth but not authenticated, redirecting to login')
     next('/login')
     return
   }
 
   // Проверка прав администратора для админ-панели
   if (to.meta.requiresAdmin && (!authStore.isAuthenticated || authStore.user?.role !== 'admin')) {
+    console.log('❌ Requires admin but not admin, redirecting to home', {
+      isAuthenticated: authStore.isAuthenticated,
+      userRole: authStore.user?.role,
+      isAdmin: authStore.isAdmin
+    })
     next('/')
     return
   }
@@ -192,16 +210,23 @@ router.beforeEach(async (to, from, next) => {
   // Проверка прав на модератора для модер-панели
   if (to.meta.requiresModerator && (!authStore.isAuthenticated || 
       (authStore.user?.role !== 'moderator' && authStore.user?.role !== 'admin'))) {
+    console.log('❌ Requires moderator but not moderator, redirecting to home', {
+      isAuthenticated: authStore.isAuthenticated,
+      userRole: authStore.user?.role,
+      isModerator: authStore.isModerator
+    })
     next('/')
     return
   }
 
   // Редирект для гостевых маршрутов если пользователь уже авторизован
   if (to.meta.guestOnly && authStore.isAuthenticated) {
+    console.log('❌ Guest route but authenticated, redirecting to home')
     next('/')
     return
   }
 
+  console.log('✅ Router guard PASSED, allowing navigation to:', to.path)
   next()
 })
 
