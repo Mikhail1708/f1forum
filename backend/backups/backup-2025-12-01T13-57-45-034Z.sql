@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict NIw0FlmwJ2BFK9y8ZPCIN6gZk9kc5ertvbXb8uSu8JzXbPGcDMWG7nNtDKjvlCt
+\restrict BgRDlxk58zhLERVzSdwIuG4YmzhGtKLjzU6UdinGmomuR7T1kQ7j7lDWMIwPMTs
 
 -- Dumped from database version 18.0
 -- Dumped by pg_dump version 18.0
@@ -18,6 +18,86 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: archive_user_soft(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.archive_user_soft(user_id_to_archive integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    archived_username VARCHAR;
+    archive_timestamp TIMESTAMP := CURRENT_TIMESTAMP;
+BEGIN
+    -- Получаем имя пользователя
+    SELECT username INTO archived_username 
+    FROM users WHERE id = user_id_to_archive;
+    
+    IF archived_username IS NULL THEN
+        RAISE EXCEPTION 'Пользователь с id % не найден', user_id_to_archive;
+    END IF;
+    
+    -- 1. Архивируем пользователя (soft delete)
+    UPDATE users SET 
+        username = 'deleted_user_' || user_id_to_archive,
+        email = 'deleted_' || user_id_to_archive || '@deleted.f1forum',
+        password_hash = 'ARCHIVED',
+        favorite_team = NULL,
+        favorite_driver = NULL,
+        status = 'banned',
+        avatar_url = NULL,
+        email_verified = false,
+        last_login = NULL
+    WHERE id = user_id_to_archive;
+    
+    -- 2. Архивируем темы пользователя
+    UPDATE topics SET 
+        title = '[Удалено] ' || title,
+        content = 'Контент удален пользователем или администратором',
+        status = 'rejected',
+        is_locked = true
+    WHERE user_id = user_id_to_archive;
+    
+    -- 3. Архивируем комментарии пользователя
+    UPDATE comments SET 
+        content = '[Комментарий удален]',
+        status = 'rejected'
+    WHERE user_id = user_id_to_archive;
+    
+    -- Логируем архивацию
+    INSERT INTO activity_logs (user_id, action, description, created_at)
+    VALUES (
+        NULL,
+        'user_archived_soft', 
+        format('Пользователь "%s" (id: %s) архивирован (soft delete)', 
+               archived_username, user_id_to_archive),
+        archive_timestamp
+    );
+    
+    RAISE NOTICE 'Пользователь "%" (id: %) архивирован (soft delete)', 
+                 archived_username, user_id_to_archive;
+END;
+$$;
+
+
+ALTER FUNCTION public.archive_user_soft(user_id_to_archive integer) OWNER TO postgres;
+
+--
+-- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.update_updated_at_column() OWNER TO postgres;
 
 SET default_tablespace = '';
 
@@ -264,7 +344,7 @@ CREATE TABLE public.grand_prix (
     circuit character varying(100) NOT NULL,
     race_date date NOT NULL,
     year integer NOT NULL,
-    round character varying(50) NOT NULL
+    round integer NOT NULL
 );
 
 
@@ -534,9 +614,9 @@ ALTER SEQUENCE public.topic_likes_id_seq OWNED BY public.topic_likes.id;
 
 CREATE TABLE public.topics (
     id integer NOT NULL,
-    title character varying(100) NOT NULL,
+    title character varying(255) NOT NULL,
     content text NOT NULL,
-    tags text,
+    tags jsonb,
     views integer DEFAULT 0,
     likes integer DEFAULT 0,
     comments_count integer DEFAULT 0,
@@ -619,19 +699,19 @@ ALTER SEQUENCE public.user_warnings_id_seq OWNED BY public.user_warnings.id;
 CREATE TABLE public.users (
     id integer NOT NULL,
     username character varying(45) NOT NULL,
-    email character varying(45) NOT NULL,
+    email character varying(254) NOT NULL,
     password_hash character varying(255) NOT NULL,
     favorite_team character varying(45),
     favorite_driver character varying(45),
     role character varying(20) DEFAULT 'user'::character varying,
     status character varying(20) DEFAULT 'active'::character varying,
-    is_moderator boolean DEFAULT false,
-    is_banned boolean DEFAULT false,
     last_login timestamp without time zone,
     login_count integer DEFAULT 0,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     avatar_url character varying(255),
-    email_verified boolean DEFAULT false
+    email_verified boolean DEFAULT false,
+    is_moderator boolean DEFAULT false,
+    is_banned boolean DEFAULT false
 );
 
 
@@ -788,6 +868,10 @@ COPY public.activity_logs (id, user_id, action, description, ip_address, user_ag
 10	4	user_suspended	Заблокирован пользователь #6	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:18:17.275317
 11	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:18:32.910356
 12	4	user_unsuspended	Разблокирован пользователь #6	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:18:43.92874
+13	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:39:40.986211
+14	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 21:58:54.720944
+15	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0	2025-11-30 22:34:56.214846
+16	4	login	Успешный вход в систему	127.0.0.1	Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0 (Edition Yx GX)	2025-11-30 22:56:19.627608
 \.
 
 
@@ -796,6 +880,7 @@ COPY public.activity_logs (id, user_id, action, description, ip_address, user_ag
 --
 
 COPY public.backups (id, filename, file_path, size, created_by, notes, created_at) FROM stdin;
+11	backup-2025-12-01T13-48-15-399Z.sql	C:\\Users\\Mikhail\\Downloads\\f1forum\\backend\\backups\\backup-2025-12-01T13-48-15-399Z.sql	60799	4	 Ласт	2025-12-01 21:48:15.659219
 \.
 
 
@@ -812,11 +897,6 @@ COPY public.categories (id, name, description, slug, created_at) FROM stdin;
 --
 
 COPY public.comment_likes (id, comment_id, user_id, created_at) FROM stdin;
-96	122	4	2025-11-26 22:04:45.014081
-97	133	4	2025-11-26 22:04:46.039301
-98	124	4	2025-11-28 20:29:20.363121
-80	88	6	2025-11-18 23:53:11.936948
-81	94	4	2025-11-20 22:36:21.238653
 \.
 
 
@@ -831,6 +911,7 @@ COPY public.comments (id, content, likes, user_id, parent_id, created_at, update
 90	ыыы	0	6	\N	2025-11-18 23:53:25.390348	2025-11-18 23:53:25.390348	46	approved
 134	ка	0	6	\N	2025-11-30 14:48:21.910622	2025-11-30 14:48:21.910622	61	approved
 135	цуаауца	0	4	\N	2025-11-30 15:59:35.654751	2025-11-30 15:59:35.654751	61	approved
+136	бан	0	4	\N	2025-12-01 21:24:50.511918	2025-12-01 21:24:50.511918	62	approved
 102	аукаукаывывывыв	0	6	\N	2025-11-24 22:07:55.653618	2025-11-25 21:36:57.415858	54	approved
 94	длввввввввввв	1	4	\N	2025-11-20 22:36:02.796685	2025-11-20 22:36:29.54893	51	approved
 96	фыфыфыфыфыфы	0	4	94	2025-11-20 22:36:17.844104	2025-11-20 22:36:17.844104	51	approved
@@ -946,6 +1027,8 @@ COPY public.moderator_actions (id, moderator_id, action_type, description, creat
 77	4	topic_approved	Одобрена тема #62	2025-11-30 21:02:59.605226
 78	4	report_resolved	Обработана жалоба #16	2025-11-30 21:13:49.183823
 79	6	report_resolved	Обработана жалоба #17	2025-11-30 21:15:12.958457
+80	4	comment_approved	Одобрен комментарий #136	2025-12-01 21:24:55.467069
+81	4	report_resolved	Обработана жалоба #18	2025-12-01 21:26:01.729231
 \.
 
 
@@ -998,6 +1081,8 @@ COPY public.reports (id, reporter_id, author_id, content_type, content_id, reaso
 12	4	10	comment	124	Спам	comment	resolved	Пользователю выдано предупреждение	4	2025-11-26 22:07:21.420033	2025-11-26 21:36:03.89946	Быстрое решение: предупредить пользователя
 16	4	6	comment	134	Спам	comment	resolved	Пользователю выдано предупреждение	4	2025-11-30 21:13:49.183286	2025-11-30 21:09:59.044075	Быстрое решение: предупредить пользователя
 17	6	10	comment	124	спам	comment	resolved	Пользователю выдано предупреждение	6	2025-11-30 21:15:12.957996	2025-11-30 21:15:04.377451	Быстрое решение: предупредить пользователя
+18	4	10	comment	124	Спам	comment	resolved	Жалоба отклонена - нарушений не обнаружено	4	2025-12-01 21:26:01.728506	2025-12-01 21:24:32.927903	Быстрое решение: отклонить жалобу
+19	4	6	topic	54	ыыы	topic	pending	\N	\N	\N	2025-12-01 21:27:48.863176	\N
 \.
 
 
@@ -1006,11 +1091,8 @@ COPY public.reports (id, reporter_id, author_id, content_type, content_id, reaso
 --
 
 COPY public.topic_likes (id, topic_id, user_id, created_at) FROM stdin;
-64	54	4	2025-11-24 22:14:07.556691
-67	58	8	2025-11-25 21:44:50.833375
-68	61	10	2025-11-26 20:53:22.135345
-73	51	4	2025-11-26 22:05:19.337245
-77	61	4	2025-11-30 16:47:27.914133
+1	54	4	2025-12-01 21:27:45.365175
+2	62	4	2025-12-01 21:46:51.807155
 \.
 
 
@@ -1019,17 +1101,17 @@ COPY public.topic_likes (id, topic_id, user_id, created_at) FROM stdin;
 --
 
 COPY public.topics (id, title, content, tags, views, likes, comments_count, is_pinned, is_locked, created_at, updated_at, user_id, category_id, status) FROM stdin;
+62	мика	ккк	["ккк"]	6	1	0	f	f	2025-11-30 21:02:55.087148	2025-12-01 21:46:51.807693	4	\N	approved
 51	ура	работает	["эта"]	11	1	0	f	f	2025-11-20 22:35:48.215874	2025-11-20 22:35:48.215874	4	\N	approved
-54	аааввввввввввввв	аааввввввв	["ааа"]	34	1	0	f	f	2025-11-24 22:07:35.578258	2025-11-25 21:37:17.124109	6	\N	approved
 60	ыыввввв	ыыввввв	["ыывввв"]	29	0	0	f	f	2025-11-25 22:14:13.024055	2025-11-26 22:05:00.482	4	\N	approved
 58	Миха гришаев	Миха ывывывывывыв	["Миха"]	15	1	0	f	f	2025-11-25 21:42:23.201795	2025-11-25 21:43:09.768067	8	\N	approved
 47	топ	топ	["топ"]	5	0	0	f	f	2025-11-19 00:07:25.712992	2025-11-19 00:07:25.712992	4	\N	approved
 46	фыы	фыфы	["фыфы"]	9	0	0	f	f	2025-11-18 23:53:22.219084	2025-11-18 23:53:22.219084	6	\N	approved
 59	п	п	["п"]	0	0	0	f	f	2025-11-25 21:49:02.365385	2025-11-25 21:49:02.365385	8	\N	rejected
-62	мика	ккк	["ккк"]	1	0	0	f	f	2025-11-30 21:02:55.087148	2025-11-30 21:02:55.087148	4	\N	approved
-61	пмаыыыыыыыыыыыыыыыыыы	ыыыыыы	["аппа"]	55	2	0	f	f	2025-11-26 20:47:49.309053	2025-11-26 21:09:48.587139	6	\N	approved
+61	пмаыыыыыыыыыыыыыыыыыы	ыыыыыы	["аппа"]	56	2	0	f	f	2025-11-26 20:47:49.309053	2025-11-26 21:09:48.587139	6	\N	approved
 48	ыыыыыыыы	ыыы	["{\\"ы\\"}"]	1	0	0	f	f	2025-11-20 21:29:53.528334	2025-11-26 21:10:14.363538	6	\N	approved
 45	ййй	йййййййййй	["йййй"]	6	0	0	f	f	2025-11-18 19:59:26.826334	2025-11-18 19:59:26.826334	6	\N	approved
+54	аааввввввввввввв	аааввввввв	["ааа"]	35	2	0	f	f	2025-11-24 22:07:35.578258	2025-11-25 21:37:17.124109	6	\N	approved
 53	Мото мото	мото	["тото"]	8	0	0	f	f	2025-11-24 21:50:44.234784	2025-11-24 21:50:44.234784	6	\N	approved
 \.
 
@@ -1055,12 +1137,12 @@ COPY public.user_warnings (id, user_id, moderator_id, reason, expires_at, create
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.users (id, username, email, password_hash, favorite_team, favorite_driver, role, status, is_moderator, is_banned, last_login, login_count, created_at, avatar_url, email_verified) FROM stdin;
-11	moderator	moderator@f1forum.com	$2a$10$TvQWQNSHJoIgPYbi/2.MdO20plOtMt2.0Cqi7qSHMXTQcZkt98cQe	\N	\N	moderator	active	f	f	\N	0	2025-11-26 20:56:09.436496	\N	f
-10	mams	lol@gmail.com	$2a$10$DrpsClQnjJUcfbYI.O29Ae2w89VSJk1771/5JCNHE3Meh715ku1KC	Mercedes		user	active	f	f	2025-11-26 20:53:03.093169	1	2025-11-26 20:52:40.993167	\N	f
-4	admin	admin@f1forum.com	$2a$10$gDsRwOHx1W.aenN9EI0jh.g7kJ7R2p8B76OAZk0fRmQy4qTxJztSe	Ferrari	Чарльз Леклер	admin	active	t	f	2025-11-30 21:18:32.909353	86	2025-11-09 18:22:32.225715	\N	t
-6	vovchikKrasaychek	moto@gmail.com	$2a$10$1k3bnxYynGoQFnNTBfIlNuMcCDfjhzv.jqc0PWsCBbo0U1M12CueK	Red Bull		moderator	active	f	f	2025-11-30 21:13:57.596285	34	2025-11-10 21:01:40.961258	\N	t
-8	mima	amim@gmail.ru	$2a$10$Gblt4bAFXU2QG.ZlKxg0Je80xop6TL9dvzWbsumE2yXRp6fv2WSOO	Ferrari	wdwd	user	active	f	f	2025-11-30 21:09:10.858827	12	2025-11-24 22:45:57.057933	\N	f
+COPY public.users (id, username, email, password_hash, favorite_team, favorite_driver, role, status, last_login, login_count, created_at, avatar_url, email_verified, is_moderator, is_banned) FROM stdin;
+11	moderator	moderator@f1forum.com	$2a$10$TvQWQNSHJoIgPYbi/2.MdO20plOtMt2.0Cqi7qSHMXTQcZkt98cQe	\N	\N	moderator	active	\N	0	2025-11-26 20:56:09.436496	\N	f	t	f
+10	mams	lol@gmail.com	$2a$10$DrpsClQnjJUcfbYI.O29Ae2w89VSJk1771/5JCNHE3Meh715ku1KC	Mercedes		user	active	2025-11-26 20:53:03.093169	1	2025-11-26 20:52:40.993167	\N	f	f	f
+6	vovchikKrasaychek	moto@gmail.com	$2a$10$1k3bnxYynGoQFnNTBfIlNuMcCDfjhzv.jqc0PWsCBbo0U1M12CueK	Red Bull		moderator	active	2025-11-30 21:13:57.596285	34	2025-11-10 21:01:40.961258	\N	t	t	f
+4	admin	admin@f1forum.com	$2a$10$gDsRwOHx1W.aenN9EI0jh.g7kJ7R2p8B76OAZk0fRmQy4qTxJztSe	Ferrari	Чарльз Леклер	admin	active	2025-11-30 22:56:19.626189	90	2025-11-09 18:22:32.225715	\N	t	t	f
+8	mima	amim@gmail.ru	$2a$10$Gblt4bAFXU2QG.ZlKxg0Je80xop6TL9dvzWbsumE2yXRp6fv2WSOO	Ferrari	wdwd	user	active	2025-11-30 21:09:10.858827	12	2025-11-24 22:45:57.057933	\N	f	f	f
 \.
 
 
@@ -1068,14 +1150,14 @@ COPY public.users (id, username, email, password_hash, favorite_team, favorite_d
 -- Name: activity_logs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.activity_logs_id_seq', 12, true);
+SELECT pg_catalog.setval('public.activity_logs_id_seq', 16, true);
 
 
 --
 -- Name: backups_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.backups_id_seq', 9, true);
+SELECT pg_catalog.setval('public.backups_id_seq', 11, true);
 
 
 --
@@ -1089,14 +1171,14 @@ SELECT pg_catalog.setval('public.categories_id_seq', 1, false);
 -- Name: comment_likes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.comment_likes_id_seq', 98, true);
+SELECT pg_catalog.setval('public.comment_likes_id_seq', 1, false);
 
 
 --
 -- Name: comments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.comments_id_seq', 135, true);
+SELECT pg_catalog.setval('public.comments_id_seq', 136, true);
 
 
 --
@@ -1117,7 +1199,7 @@ SELECT pg_catalog.setval('public.grand_prix_id_seq', 2, true);
 -- Name: moderator_actions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.moderator_actions_id_seq', 79, true);
+SELECT pg_catalog.setval('public.moderator_actions_id_seq', 81, true);
 
 
 --
@@ -1145,14 +1227,14 @@ SELECT pg_catalog.setval('public.report_notes_id_seq', 1, false);
 -- Name: reports_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.reports_id_seq', 17, true);
+SELECT pg_catalog.setval('public.reports_id_seq', 19, true);
 
 
 --
 -- Name: topic_likes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.topic_likes_id_seq', 77, true);
+SELECT pg_catalog.setval('public.topic_likes_id_seq', 2, true);
 
 
 --
@@ -1478,6 +1560,20 @@ CREATE INDEX idx_user_warnings_user_id ON public.user_warnings USING btree (user
 
 
 --
+-- Name: comments update_comments_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: topics update_topics_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER update_topics_updated_at BEFORE UPDATE ON public.topics FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
 -- Name: activity_logs activity_logs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1657,5 +1753,5 @@ ALTER TABLE ONLY public.user_warnings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict NIw0FlmwJ2BFK9y8ZPCIN6gZk9kc5ertvbXb8uSu8JzXbPGcDMWG7nNtDKjvlCt
+\unrestrict BgRDlxk58zhLERVzSdwIuG4YmzhGtKLjzU6UdinGmomuR7T1kQ7j7lDWMIwPMTs
 
