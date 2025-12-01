@@ -107,7 +107,7 @@ const routes = [
       },
       {
         path: 'users',
-        name: 'UserManagement',
+        name: 'AdminUserManagement',
         component: () => import('../views/admin/UserManagement.vue')
       },
       {
@@ -142,7 +142,7 @@ const routes = [
       },
       {
         path: 'users',
-        name: 'UserManagement',
+        name: 'ModeratorUserManagement',
         component: () => import('../views/moderator/UserManagement.vue')
       }
     ]

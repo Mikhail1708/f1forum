@@ -222,7 +222,7 @@ onMounted(async () => {
   console.log('🔄 UserManagement mounted - TEST WITHOUT API');
   
   // ВРЕМЕННО ЗАКОММЕНТИРОВАНО ДЛЯ ТЕСТА
-  /*
+  
   try {
     console.log('🚀 Making API calls...');
     await adminStore.fetchUsers();
@@ -236,7 +236,7 @@ onMounted(async () => {
       data: error.response?.data
     });
   }
-  */
+  
 });
 
 // Обработка поиска

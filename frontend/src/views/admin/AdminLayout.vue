@@ -6,9 +6,6 @@
         <h1>🏎️ F1 Forum Admin</h1>
         <!-- ОТЛАДОЧНАЯ ИНФОРМАЦИЯ -->
         <div class="debug-info">
-          <small>Route: {{ $route.path }}</small>
-          <small>User: {{ authStore.user?.username }} ({{ authStore.user?.role }})</small>
-          <small>isAdmin: {{ authStore.isAdmin }}</small>
         </div>
       </div>
       <div class="header-right">
