@@ -30,12 +30,7 @@
       {{ loading ? 'Вход...' : 'Войти' }}
     </button>
 
-    <div class="debug-info" v-if="debug">
-      <h4>Отладочная информация:</h4>
-      <p>Email: {{ credentials.email }}</p>
-      <p>Loading: {{ loading }}</p>
-      <p>Error: {{ error }}</p>
-    </div>
+  
   </form>
 </template>
 
@@ -48,8 +43,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const credentials = ref({
-  email: 'admin@f1forum.com', //预设管理员邮箱方便测试
-  password: 'admin123'
+  
 })
 const loading = ref(false)
 const error = ref('')

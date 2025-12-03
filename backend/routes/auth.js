@@ -14,5 +14,5 @@ router.post('/reset-password', authController.resetPassword);
 // Protected routes
 router.get('/me', auth, authController.getMe);
 router.post('/logout', auth, authController.logout);
-
+router.get('/check-registration', authController.checkRegistration);
 module.exports = router;

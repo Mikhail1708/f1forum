@@ -31,6 +31,15 @@ class User {
     return rows[0];
   }
 
+  // ДОБАВИТЬ ЭТОТ МЕТОД
+  static async findByUsername(username) {
+    const { rows } = await db.query(
+      'SELECT * FROM users WHERE username = $1',
+      [username]
+    );
+    return rows[0];
+  }
+
   static async findById(id) {
     const { rows } = await db.query(
       `SELECT id, username, email, favorite_team, favorite_driver, 
@@ -190,6 +199,5 @@ class User {
     return rows[0];
   }
 }
-
 
 module.exports = User;

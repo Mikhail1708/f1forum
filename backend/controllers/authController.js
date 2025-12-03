@@ -64,6 +64,8 @@ class AuthController {
       });
 
       console.log('✅ Login successful for:', email);
+      console.log('✅ User ID:', user.id);
+      console.log('✅ User role:', user.role);
 
       res.json({
         success: true,
@@ -94,10 +96,12 @@ class AuthController {
       const { username, email, password, favorite_team, favorite_driver } = req.body;
 
       console.log('👤 Registration attempt for:', email);
+      console.log('👤 Username:', username);
 
-      // Проверяем, существует ли пользователь
-      const existingUser = await User.findByEmail(email);
-      if (existingUser) {
+      // Проверяем, существует ли пользователь по email
+      const existingUserByEmail = await User.findByEmail(email);
+      if (existingUserByEmail) {
+        console.log('❌ Email already exists:', email);
         return res.status(400).json({
           success: false,
           error: 'Пользователь с таким email уже существует'
@@ -105,12 +109,9 @@ class AuthController {
       }
 
       // Проверяем имя пользователя
-      const existingUsername = await db.query(
-        'SELECT id FROM users WHERE username = $1',
-        [username]
-      );
-      
-      if (existingUsername.rows.length > 0) {
+      const existingUserByUsername = await User.findByUsername(username);
+      if (existingUserByUsername) {
+        console.log('❌ Username already exists:', username);
         return res.status(400).json({
           success: false,
           error: 'Пользователь с таким именем уже существует'
@@ -119,15 +120,38 @@ class AuthController {
 
       // Хешируем пароль
       const passwordHash = await bcrypt.hash(password, 10);
+      console.log('🔐 Password hashed successfully');
 
       // Создаем пользователя
       const user = await User.create({
         username,
         email,
         password_hash: passwordHash,
-        favorite_team,
-        favorite_driver
+        favorite_team: favorite_team || null,
+        favorite_driver: favorite_driver || null
       });
+
+      console.log('✅ User created in database:', user.id);
+      console.log('✅ User data:', {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      });
+
+      // Обновляем информацию о входе
+      await User.updateLoginInfo(user.id);
+
+      // Создаем JWT токен для автоматического входа
+      const token = jwt.sign(
+        { 
+          userId: user.id, 
+          email: user.email,
+          role: user.role 
+        },
+        process.env.JWT_SECRET || 'fallback-secret-key',
+        { expiresIn: '24h' }
+      );
 
       // Логируем регистрацию
       await ActivityLog.create({
@@ -139,22 +163,31 @@ class AuthController {
       });
 
       console.log('✅ Registration successful for:', email);
+      console.log('✅ Token generated');
 
       res.status(201).json({
         success: true,
         message: 'Пользователь успешно зарегистрирован',
-        data: {
+        token, // Добавляем токен в ответ
+        user: {
           id: user.id,
           username: user.username,
-          email: user.email
+          email: user.email,
+          role: user.role || 'user',
+          is_moderator: user.is_moderator || false,
+          favorite_team: user.favorite_team,
+          favorite_driver: user.favorite_driver,
+          email_verified: user.email_verified || false
         }
       });
 
     } catch (error) {
       console.error('❌ Registration error:', error);
+      console.error('❌ Error details:', error.message);
       res.status(500).json({
         success: false,
-        error: 'Ошибка при регистрации'
+        error: 'Ошибка при регистрации',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }
@@ -294,6 +327,45 @@ class AuthController {
       res.status(500).json({
         success: false,
         error: 'Ошибка при сбросе пароля'
+      });
+    }
+  }
+
+  // НОВЫЙ МЕТОД для проверки регистрации
+  async checkRegistration(req, res) {
+    try {
+      const { email, username } = req.query;
+      
+      let exists = false;
+      let type = '';
+
+      if (email) {
+        const user = await User.findByEmail(email);
+        if (user) {
+          exists = true;
+          type = 'email';
+        }
+      }
+
+      if (username && !exists) {
+        const user = await User.findByUsername(username);
+        if (user) {
+          exists = true;
+          type = 'username';
+        }
+      }
+
+      res.json({
+        success: true,
+        exists,
+        type
+      });
+
+    } catch (error) {
+      console.error('❌ Check registration error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Ошибка при проверке регистрации'
       });
     }
   }

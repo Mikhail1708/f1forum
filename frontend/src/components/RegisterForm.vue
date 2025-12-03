@@ -200,23 +200,36 @@ const handleRegister = async () => {
   error.value = '';
 
   try {
-    // Временно используем прямой запрос для отладки
     console.log('Отправка данных регистрации:', form.value);
     
     const response = await api.post('/auth/register', form.value);
     console.log('Ответ сервера:', response.data);
     
-    if (response.data.message === 'User registered successfully') {
+    // ИСПРАВЛЕНО: проверяем success
+    if (response.data.success) {
+      console.log('Токен:', response.data.token);
+      console.log('Пользователь:', response.data.user);
+      
       // Сохраняем данные через store
-      await authStore.login({
-        email: form.value.email,
-        password: form.value.password
+      authStore.$patch({
+        token: response.data.token,
+        user: response.data.user,
+        isAuthenticated: true
       });
       
+      // Сохраняем в localStorage
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      // Добавляем токен в заголовки axios
+      api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+      
       success.value = true;
+      
+      console.log('✅ Registration successful, redirecting...');
       setTimeout(() => {
         router.push('/');
-      }, 2000);
+      }, 1500);
     } else {
       error.value = response.data.error || 'Ошибка регистрации';
     }
